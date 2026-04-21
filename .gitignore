@@ -1,0 +1,15 @@
+# 忽略数据库文件，防止部署更新时覆盖已有数据
+*.db
+lab_data.db
+cell_db.db
+
+# 忽略 Python 运行缓存
+__pycache__/
+*.pyc
+
+# 忽略虚拟环境支持文件和本地环境变量设置
+venv/
+.env
+
+# MacOS 的系统文件缓存
+.DS_Store
