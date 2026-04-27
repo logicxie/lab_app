@@ -57,12 +57,17 @@ async function openModule(modId) {
         if (typeof loadPcrData === 'function') {
             await loadPcrData();
         }
+    } else if (modId === 'wb') {
+        if (typeof loadWbData === 'function') {
+            await loadWbData();
+        }
     } else if (modId === 'protocols') {
         await Promise.all([
             loadProtocols(),
             loadMwLibrary(),
             loadCellDb(),
-            typeof loadPcrData === 'function' ? loadPcrData() : Promise.resolve()
+            typeof loadPcrData === 'function' ? loadPcrData() : Promise.resolve(),
+            typeof loadWbData === 'function' ? loadWbData() : Promise.resolve()
         ]);
     }
 }

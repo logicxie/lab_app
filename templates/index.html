@@ -4,22 +4,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <!-- PWA / Fullscreen Mobile Mode -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-touch-fullscreen" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>实验小助手</title>
     <meta name="description" content="实验室管理助手 — 细胞传代、加药方案、日程管理">
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔬</text></svg>">
-    <!-- Google Fonts -->
+    <!-- Google Fonts: Anthropic-like (Source Sans 3 + Source Serif 4 + JetBrains Mono) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
     <!-- Tabler Icons Webfont (local) -->
     <link rel="stylesheet" href="/static/fonts/tabler/tabler-icons.min.css">
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- App Styles -->
-    <link rel="stylesheet" href="/static/css/style.css?v=6">
+    <link rel="stylesheet" href="/static/css/style.css?v=17">
 </head>
 
 <body>
@@ -95,6 +100,11 @@
                         <div class="name">实验方案库</div>
                         <div class="desc">细胞档案、造模方案、PCR 方案管理</div>
                     </div>
+                    <div class="module-card" onclick="openModule('wb')">
+                        <div class="icon"><i class="ti ti-layers-subtract"></i></div>
+                        <div class="name">Western Blot</div>
+                        <div class="desc">提取、制胶排配、敷条抗体推算全集成</div>
+                    </div>
                     <div class="module-card" onclick="openModule('if')">
                         <div class="icon"><i class="ti ti-microscope"></i></div>
                         <div class="name">免疫荧光</div>
@@ -106,6 +116,25 @@
                         <div class="desc">剂量计算、取材记录登记</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- ─── Western Blot 模块 ─── -->
+            <div id="mod-wb" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()"><i class="ti ti-chevron-left"></i> 返回实验助手</button>
+                <div class="page-title"><i class="ti ti-layers-subtract ti-md"></i> Western Blot</div>
+                
+                <div class="tabs" style="margin-top:12px">
+                    <button class="tab-btn active" onclick="switchTab(this,'wbTab','wbSamples')">样本组</button>
+                    <button class="tab-btn" onclick="switchTab(this,'wbTab','wbExtract')">提取/配平</button>
+                    <button class="tab-btn" onclick="switchTab(this,'wbTab','wbElectro')">跑胶转膜</button>
+                    <button class="tab-btn" onclick="switchTab(this,'wbTab','wbDetect')">裁膜抗体</button>
+                </div>
+                
+                <!-- WB 子面板 -->
+                <div id="wbSamples" class="tab-panel wbTab active" style="padding-bottom:40px;"></div>
+                <div id="wbExtract" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
+                <div id="wbElectro" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
+                <div id="wbDetect" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
             </div>
 
             <!-- ─── 细胞传代模块 ─── -->
@@ -229,6 +258,8 @@
                 <div id="drugProtocolsBox"></div>
                 <div class="divider"></div>
                 <div id="pcrProtocolsContainer"></div>
+                <div class="divider"></div>
+                <div id="wbProtocolsContainer"></div>
                 <div class="divider"></div>
                 <div id="mwLibraryBox"></div>
             </div>
@@ -359,21 +390,11 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">界面主色调</label>
-                    <div style="display:flex;gap:12px;align-items:center;padding:8px 0;">
-                        <div class="color-dot" style="background:#5a67d8;"
-                            onclick="profSetAccent('#5a67d8', 'rgba(90,103,216,0.1)', 'rgba(90,103,216,0.22)')"></div>
-                        <div class="color-dot" style="background:#0a84ff;"
-                            onclick="profSetAccent('#0a84ff', 'rgba(10,132,255,0.1)', 'rgba(10,132,255,0.22)')"></div>
-                        <div class="color-dot" style="background:#30d158;"
-                            onclick="profSetAccent('#30d158', 'rgba(48,209,88,0.1)', 'rgba(48,209,88,0.22)')"></div>
-                        <div class="color-dot" style="background:#ff375f;"
-                            onclick="profSetAccent('#ff375f', 'rgba(255,55,95,0.1)', 'rgba(255,55,95,0.22)')"></div>
-                        <div class="color-dot" style="background:#ff9f0a;"
-                            onclick="profSetAccent('#ff9f0a', 'rgba(255,159,10,0.1)', 'rgba(255,159,10,0.22)')"></div>
-                        <div class="color-dot" style="background:#8e8e93;"
-                            onclick="profSetAccent('#8e8e93', 'rgba(142,142,147,0.1)', 'rgba(142,142,147,0.22)')"></div>
+                    <label class="form-label">界面主题调色</label>
+                    <div class="section-subtitle" style="margin-bottom:6px;">
+                        选择不同页面底色，重点色与字色将同步匹配
                     </div>
+                    <div class="theme-grid" id="themeGrid"></div>
                 </div>
             </div>
 
@@ -420,13 +441,14 @@
         </button>
     </nav>
 
-    <script src="/static/js/records.js?v=12"></script>
-    <script src="/static/js/app.js?v=29"></script>
-    <script src="/static/js/pcr.js?v=23"></script>
+    <script src="/static/js/records.js?v=13"></script>
+    <script src="/static/js/app.js?v=30"></script>
+    <script src="/static/js/wb.js?v=3"></script>
+    <script src="/static/js/pcr.js?v=27"></script>
     <script src="/static/js/journal.js?v=7"></script>
     <script src="/static/js/if_module.js?v=1"></script>
     <script src="/static/js/animal_module.js?v=1"></script>
-    <script src="/static/js/profile.js?v=2"></script>
+    <script src="/static/js/profile.js?v=4"></script>
 </body>
 
 </html>

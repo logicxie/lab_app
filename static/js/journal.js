@@ -15,6 +15,9 @@ const JN_TYPE_META = {
     pcr_rna: { color: '#30d158', bg: 'rgba(48, 209, 88, 0.15)', icon: 'ti-droplet', label: 'RNA' },
     pcr_rt: { color: '#7c3aed', bg: 'rgba(124, 58, 237, 0.15)', icon: 'ti-arrows-right-left', label: 'RT' },
     pcr_qpcr: { color: '#ff375f', bg: 'rgba(255, 55, 95, 0.15)', icon: 'ti-chart-line', label: 'qPCR' },
+    wb_extract: { color: '#007aff', bg: 'rgba(0,122,255,0.15)', icon: 'ti-droplet', label: 'WB 提取' },
+    wb_electro: { color: '#5856d6', bg: 'rgba(88,86,214,0.15)', icon: 'ti-layout-columns', label: 'WB 跑胶' },
+    wb_detect: { color: '#ff2d55', bg: 'rgba(255,45,85,0.15)', icon: 'ti-cut', label: 'WB 洗膜' },
 };
 
 // ── 初始化 ──
@@ -149,7 +152,7 @@ function jnShowPickerModal(records) {
     let old = document.getElementById('jnPickerModal');
     if (old) old.remove();
 
-    let typeOrder = ['experiment', 'passage', 'pcr_qpcr', 'pcr_rt', 'pcr_rna'];
+    let typeOrder = ['experiment', 'passage', 'pcr_qpcr', 'pcr_rt', 'pcr_rna', 'wb_detect', 'wb_electro', 'wb_extract'];
     let grouped = {};
     typeOrder.forEach(t => { grouped[t] = []; });
     records.forEach(r => { if (grouped[r.type]) grouped[r.type].push(r); });

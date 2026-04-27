@@ -120,6 +120,10 @@ async def get_all_records():
     rt_logs = load_data("pcr_rt_logs", [])
     qpcr_logs = load_data("pcr_qpcr_logs", [])
 
+    wb_extract = load_data("wb_extract_logs", [])
+    wb_electro = load_data("wb_electrophoresis_logs", [])
+    wb_detect = load_data("wb_detection_logs", [])
+
     def tag(records, rtype, label_key, time_key):
         result = []
         for r in records:
@@ -134,7 +138,10 @@ async def get_all_records():
         tag(experiments, "experiment", "name", "created_at") +
         tag(rna_logs, "pcr_rna", "name", "timestamp") +
         tag(rt_logs, "pcr_rt", "name", "timestamp") +
-        tag(qpcr_logs, "pcr_qpcr", "name", "timestamp")
+        tag(qpcr_logs, "pcr_qpcr", "name", "timestamp") +
+        tag(wb_extract, "wb_extract", "name", "created_at") +
+        tag(wb_electro, "wb_electro", "name", "created_at") +
+        tag(wb_detect, "wb_detect", "name", "created_at")
     )
     all_records.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return all_records
@@ -750,6 +757,56 @@ async def delete_pcr_data(category: str, type: str, item_id: str):
     items = [i for i in items if i.get("id") != item_id]
     save_data(key, items)
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════
+#  WB (Western Blot) 模块 API
+# ══════════════════════════════════════════════
+
+@app.get("/api/wb/{category}/{type}")
+async def get_wb_data(category: str, type: str):
+    if category not in ["samples", "extract", "electrophoresis", "detection"] or type not in ["groups", "protocols", "logs"]:
+        return JSONResponse({"error": "Invalid path"}, 400)
+    return load_data(f"wb_{category}_{type}", [])
+
+@app.post("/api/wb/{category}/{type}")
+async def save_wb_data(category: str, type: str, req: Request):
+    if category not in ["samples", "extract", "electrophoresis", "detection"] or type not in ["groups", "protocols", "logs"]:
+        return JSONResponse({"error": "Invalid path"}, 400)
+    key = f"wb_{category}_{type}"
+    data = await req.json()
+    items = load_data(key, [])
+    
+    if not data.get("id"):
+        data["id"] = str(uuid.uuid4())
+        if "created_at" not in data:
+            data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        items.append(data)
+    else:
+        found = False
+        for i, item in enumerate(items):
+            if item.get("id") == data["id"]:
+                if "created_at" not in data and "created_at" in item:
+                    data["created_at"] = item["created_at"]
+                items[i] = data
+                found = True
+                break
+        if not found:
+            if "created_at" not in data:
+                data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            items.append(data)
+            
+    save_data(key, items)
+    return data
+
+@app.delete("/api/wb/{category}/{type}/{item_id}")
+async def delete_wb_data(category: str, type: str, item_id: str):
+    key = f"wb_{category}_{type}"
+    items = load_data(key, [])
+    items = [i for i in items if i.get("id") != item_id]
+    save_data(key, items)
+    return {"ok": True}
+
 
 
 # ══════════════════════════════════════════════

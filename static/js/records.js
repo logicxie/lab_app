@@ -185,6 +185,17 @@ function _buildRtDetail(d) {
         </div>`;
     }
 
+    // Build steps visually
+    let checks = d.activeCheck || [];
+    let pID = d.protocol_id;
+    let proto = (typeof PCR_STATE !== 'undefined') ? PCR_STATE.rtProtocols.find(p => p.id === pID) : null;
+    let stepsArr = proto ? (proto.steps || []) : [];
+    let stepsHtml = stepsArr.map((s, i) => `
+        <label class="step-item ${checks[i] ? 'checked' : ''}" style="pointer-events:none;opacity:${checks[i] ? 1 : 0.65};">
+            <input type="checkbox" class="step-checkbox" ${checks[i] ? 'checked' : ''} disabled>
+            <div><b>Step ${i + 1}.</b> ${s}</div>
+        </label>`).join('');
+
     return `
     <div class="card" style="margin-bottom:8px;">
         <div class="card-header"><i class="ti ti-arrows-right-left"></i> 逆转录</div>
@@ -200,7 +211,8 @@ function _buildRtDetail(d) {
             <tbody>${tableRows}</tbody>
         </table></div>
     </div>`: ''}
-    ${stripHtml}`;
+    ${stripHtml}
+    ${stepsHtml ? `<div class="card" style="margin-bottom:8px;"><div class="card-header"><i class="ti ti-checklist"></i> 操作步骤（只读）</div>${stepsHtml}</div>` : ''}`;
 }
 
 /* ── qPCR ── */
@@ -242,6 +254,17 @@ function _buildQpcrDetail(d) {
         statusBadge = _rdField('状态', `<span class="badge ${badgeClass}">${d.status}</span>`);
     }
 
+    // Build steps visually
+    let checks = d.activeCheck || [];
+    let pID = d.protocol_id;
+    let proto = (typeof PCR_STATE !== 'undefined') ? PCR_STATE.qpcrProtocols.find(p => p.id === pID) : null;
+    let stepsArr = proto ? (proto.steps || []) : [];
+    let stepsHtml = stepsArr.map((s, i) => `
+        <label class="step-item ${checks[i] ? 'checked' : ''}" style="pointer-events:none;opacity:${checks[i] ? 1 : 0.65};">
+            <input type="checkbox" class="step-checkbox" ${checks[i] ? 'checked' : ''} disabled>
+            <div><b>Step ${i + 1}.</b> ${s}</div>
+        </label>`).join('');
+
     return `
     <div class="card" style="margin-bottom:8px;">
         <div class="card-header"><i class="ti ti-chart-line"></i> 荧光定量 (qPCR)</div>
@@ -254,7 +277,8 @@ function _buildQpcrDetail(d) {
     <div class="card" style="margin-bottom:8px;">
         <div class="card-header"><i class="ti ti-grid-dots"></i> 384孔板布局（只读）</div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">${plateHtml}</div>
-    </div>`;
+    </div>
+    ${stepsHtml ? `<div class="card" style="margin-bottom:8px;"><div class="card-header"><i class="ti ti-checklist"></i> 操作步骤（只读）</div>${stepsHtml}</div>` : ''}`;
 }
 
 /* ── PCR 样本组 ── */
@@ -302,6 +326,9 @@ window.buildRecordDetailHTML = function (type, data) {
     if (type === 'pcr_qpcr') return _buildQpcrDetail(data);
     if (type === 'pcr_sample_group') return _buildPcrSampleGroupDetail(data);
     if (type === 'dilution') return _buildDilutionDetail(data);
+    if (type === 'wb_extract') return typeof _buildWbExtractDetail === 'function' ? _buildWbExtractDetail(data) : '';
+    if (type === 'wb_electro') return typeof _buildWbElectroDetail === 'function' ? _buildWbElectroDetail(data) : '';
+    if (type === 'wb_detect') return typeof _buildWbDetectDetail === 'function' ? _buildWbDetectDetail(data) : '';
     return `<div style="font-size:12px;color:var(--text-secondary);padding:8px">类型[${type}]暂无详情模板</div>`;
 };
 
