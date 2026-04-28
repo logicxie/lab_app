@@ -36,6 +36,114 @@ function wbCreateId() {
     return `wb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+function wbNotifyBlocked(message) {
+    if (typeof showToast === 'function') showToast(message, 'error');
+    else window.alert(message);
+}
+
+function wbGetUsableSampleGroups() {
+    return (WB_STATE.sampleGroups || []).filter(group =>
+        Array.isArray(group.samples) && group.samples.some(sample => String(sample.name || '').trim())
+    );
+}
+
+function wbPendingSampleGroupHasSamples() {
+    let group = window._curWbSampleGroup;
+    return !!(group && Array.isArray(group.samples) && group.samples.some(sample => String(sample.name || '').trim()));
+}
+
+function wbStatusBadge(status) {
+    let cls = status === '已完成' ? 'badge-success' : 'badge-info';
+    return `<span class="badge ${cls}">${status || '进行中'}</span>`;
+}
+
+function wbRdField(label, val, full) {
+    if (typeof _rdField === 'function') return _rdField(label, val, full);
+    if (val == null || val === '') return '';
+    return `<div class="form-group" style="margin-bottom:8px;"><label class="form-label" style="font-size:11px;">${label}</label><div class="rd-readonly-val${full ? ' rd-full' : ''}">${val}</div></div>`;
+}
+
+function wbRdRow(...fields) {
+    let fs = fields.filter(Boolean);
+    if (typeof _rdRow === 'function') return _rdRow(...fields);
+    return fs.length ? `<div class="form-row" style="margin-bottom:0;">${fs.join('')}</div>` : '';
+}
+
+function wbResolveProtocol(category, id) {
+    let list = [];
+    if (category === 'extract') list = WB_STATE.protocols.extract || [];
+    if (category === 'electrophoresis') list = WB_STATE.protocols.electrophoresis || [];
+    if (category === 'detectionWorkflow') list = WB_STATE.protocols.detectionWorkflows || [];
+    return list.find(item => item.id === id) || null;
+}
+
+function wbResolveSteps(category, data) {
+    if (Array.isArray(data.steps) && data.steps.length > 0) return data.steps;
+    let proto = null;
+    if (category === 'extract') proto = wbResolveProtocol('extract', data.protocol_id);
+    if (category === 'electrophoresis') proto = wbResolveProtocol('electrophoresis', data.protocol_id);
+    if (category === 'detection') proto = wbResolveProtocol('detectionWorkflow', data.workflow_id);
+    return proto && Array.isArray(proto.steps) ? proto.steps : [];
+}
+
+function wbBuildStepChecklist(steps, checks, inputPrefix, onchangeName, title) {
+    if (!Array.isArray(steps) || steps.length === 0) return '';
+    return `<details style="margin: 8px 0; background: var(--surface-hover); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px; color:var(--text-secondary);"><i class="ti ti-info-circle"></i> ${title}</summary>
+        <div class="step-list" style="margin-top:8px;">
+            ${steps.map((step, i) => `
+                <label class="step-item ${(checks || [])[i] ? 'checked' : ''}" id="${inputPrefix}Item_${i}">
+                    <input type="checkbox" class="step-checkbox" ${(checks || [])[i] ? 'checked' : ''} onchange="${onchangeName}(${i}, this.checked)">
+                    <div><b>Step ${i + 1}.</b> ${step}</div>
+                </label>`).join('')}
+        </div>
+    </details>`;
+}
+
+function wbBuildReadonlySteps(steps, checks) {
+    if (!Array.isArray(steps) || steps.length === 0) return '';
+    return `<div class="card" style="margin-bottom:8px;"><div class="card-header"><i class="ti ti-checklist"></i> 操作步骤（只读）</div>
+        ${steps.map((step, i) => `
+            <label class="step-item ${(checks || [])[i] ? 'checked' : ''}" style="pointer-events:none;opacity:${(checks || [])[i] ? 1 : 0.65};">
+                <input type="checkbox" class="step-checkbox" ${(checks || [])[i] ? 'checked' : ''} disabled>
+                <div><b>Step ${i + 1}.</b> ${step}</div>
+            </label>`).join('')}
+    </div>`;
+}
+
+function wbGetStageMeta(category, log) {
+    const meta = {
+        extract: { type: 'wb_extract', icon: 'ti-droplet', color: '#007aff', label: 'WB 提取配平' },
+        electrophoresis: { type: 'wb_electro', icon: 'ti-layout-columns', color: '#5856d6', label: 'WB 跑胶转膜' },
+        detection: { type: 'wb_detect', icon: 'ti-cut', color: '#ff2d55', label: 'WB 裁膜显影' }
+    }[category];
+    let label = meta.label + (log.status ? ` · ${log.status}` : '');
+    let steps = wbResolveSteps(category === 'detection' ? 'detection' : category, log);
+    if (steps.length > 0 && Array.isArray(log.activeCheck)) {
+        let done = log.activeCheck.filter(Boolean).length;
+        label += ` · 步骤 ${done}/${steps.length}`;
+    }
+    return { ...meta, typeLabel: label, bgColor: log.status === '已完成' ? 'var(--surface-hover)' : 'var(--surface)' };
+}
+
+function wbBuildStageHistory(category) {
+    let logs = [...(WB_STATE.logs[category] || [])].reverse();
+    if (logs.length === 0) return '<div class="empty-state">暂无记录</div>';
+    return logs.map(log => {
+        let meta = wbGetStageMeta(category, log);
+        let extras = `
+            <button class="btn btn-sm btn-secondary" style="padding:2px 7px; margin-right:4px;" onclick="event.stopPropagation();_wbEditLog('${category}','${log.id}')"><i class="ti ti-pencil"></i></button>
+            <button class="btn btn-sm btn-danger" style="padding:2px 7px;" onclick="event.stopPropagation();deleteWbItem('${category}','logs','${log.id}', event)"><i class="ti ti-x"></i></button>`;
+        return buildRecordCard({ key: `wb_${category}_${log.id}`, type: meta.type, data: log, meta, extraButtons: extras });
+    }).join('');
+}
+
+window._wbEditLog = function(category, id) {
+    if (category === 'extract') loadWbExtractState(id);
+    if (category === 'electrophoresis') loadWbElectroState(id);
+    if (category === 'detection') loadWbDetectState(id);
+};
+
 function wbSplitDetectionProtocols(items) {
     let antibodies = [];
     let workflows = [];
@@ -302,7 +410,7 @@ window.editWbPEx = function(id) {
     let p = WB_STATE.protocols.extract.find(x => x.id === id);
     if(p) {
         document.getElementById('wbPExName').value = p.name;
-        document.getElementById('wbPExSteps').value = p.steps.join('\\n');
+        document.getElementById('wbPExSteps').value = (p.steps || []).join('\\n');
         document.getElementById('wbPExLb').value = p.lb_factor || '5';
         window._editingWbPExId = id;
     }
@@ -450,15 +558,15 @@ window.renderWbSamples = function() {
 
     let historyHtml = `
         <div class="divider"></div>
-        <div class="section-title"><i class="ti ti-database"></i> 已归档的 WB 样本组</div>
+        <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
         ${WB_STATE.sampleGroups.length === 0 ? '<div class="empty-state">暂无样本组</div>' : WB_STATE.sampleGroups.map(g => {
         let extras = `<button class="btn btn-sm btn-secondary" style="padding:2px 7px; margin-right:4px;" onclick="event.stopPropagation();viewWbSampleGroup('${g.id}')"><i class="ti ti-pencil"></i></button>
                       <button class="btn btn-sm btn-danger" style="padding:2px 7px;" onclick="event.stopPropagation();deleteWbItem('samples','groups','${g.id}', event)"><i class="ti ti-trash"></i></button>`;
         return buildRecordCard({
             key: 'wb_sg_' + g.id,
-            type: 'default',
-            data: { created_at: g.created_at, samples: g.samples },
-            meta: { icon: 'ti-box', color: 'var(--accent)', title: g.name, subtitle: `来源: ${g.source} | 共 ${g.samples.length} 个独立样本` },
+            type: 'wb_sample_group',
+            data: g,
+            meta: { icon: 'ti-users', color: '#3498DB', typeLabel: `WB 样本组 · ${(g.samples || []).length}个样本` },
             extraButtons: extras
         });
     }).join('')}`;
@@ -560,29 +668,14 @@ window.renderWbExtract = function() {
 
     let historyHtml = `
         <div class="divider"></div>
-        <div class="section-title"><i class="ti ti-history"></i> 进行中与已完成记录</div>
-        <div id="wbExHistory">
-            ${WB_STATE.logs.extract.length === 0 ? '<div class="empty-state">暂无记录</div>' : WB_STATE.logs.extract.map(l => {
-                return `
-                    <div class="event-card ${l.status==='已完成'?'done':''}" onclick="loadWbExtractState('${l.id}')" style="cursor:pointer">
-                        <div class="event-card-icon"><i class="ti ${l.status==='已完成'?'ti-check':'ti-loader'}"></i></div>
-                        <div class="event-card-body">
-                            <div style="font-weight:700">${l.name}</div>
-                            <div style="font-size:12px;opacity:0.8;margin-top:2px">${l.status} | 依据方案: ${l.p_name} | 样本数: ${l.samples.length}</div>
-                        </div>
-                        <button class="btn btn-sm btn-danger" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:2px 6px;" onclick="event.stopPropagation();deleteWbItem('extract','logs','${l.id}', event)"><i class="ti ti-trash"></i></button>
-                    </div>
-                `;
-            }).join('')}
-        </div>
+        <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
+        <div id="wbExHistory">${wbBuildStageHistory('extract')}</div>
     `;
 
     if (!window._curWbExtract) {
-        let noProto = WB_STATE.protocols.extract.length === 0;
-        let noGrp = WB_STATE.sampleGroups.length === 0;
         c.innerHTML = `
             <div class="card" style="margin-top:8px;">
-                <button class="btn btn-primary btn-block" onclick="_startNewWbExtract()" ${(noProto || noGrp) ? 'disabled title="请先建立样本组和方案"' : ''}><i class="ti ti-player-play"></i> 开始提取变性实验</button>
+                <button class="btn btn-primary btn-block" onclick="_startNewWbExtract()"><i class="ti ti-player-play"></i> 开始提取变性实验</button>
             </div>
             ${historyHtml}
         `;
@@ -590,22 +683,11 @@ window.renderWbExtract = function() {
     }
 
     let e = window._curWbExtract;
-    let p = WB_STATE.protocols.extract.find(x => x.id === e.protocol_id);
-    let st = p ? p.steps : [];
+    let p = WB_STATE.protocols.extract.find(x => x.id === e.protocol_id) || { id: '', name: e.p_name || '默认参数', steps: [], lb_factor: e.bufferX || 5 };
+    let st = p.steps || [];
     
-    // Checkbox mapping
     let checkArr = e.activeCheck || [];
-    let stepsHtml = st.length === 0 ? '' : `
-        <details class="pcr-step-container">
-            <summary class="pcr-step-summary"><i class="ti ti-list-check"></i> 提取阶段操作步骤清单 (展开)</summary>
-            ${st.map((step, i) => `
-                <div class="pcr-step-item">
-                    <input type="checkbox" id="wbex_chk_${i}" class="pcr-step-cb" ${checkArr[i]?'checked':''} onchange="wbUpdateExCheck(${i}, this.checked)">
-                    <label for="wbex_chk_${i}" class="pcr-step-label">${step}</label>
-                </div>
-            `).join('')}
-        </details>
-    `;
+    let stepsHtml = wbBuildStepChecklist(st, checkArr, 'wbexStep', 'wbUpdateExCheck', '实验步骤提示 / Protocol Steps');
 
     // Standards Setup
     let stdHtml = `
@@ -691,8 +773,10 @@ window.renderWbExtract = function() {
         </div>
     `;
 
-    let srcOptions = WB_STATE.sampleGroups.map(g => `<option value="${g.id}" ${g.id === e.group_id?'selected':''}>${g.name} (${g.samples.length}样)</option>`).join('');
-    let protoOptions = WB_STATE.protocols.extract.map(p => `<option value="${p.id}" ${p.id === e.protocol_id?'selected':''}>${p.name}</option>`).join('');
+    let srcOptions = wbGetUsableSampleGroups().map(g => `<option value="${g.id}" ${g.id === e.group_id?'selected':''}>${g.name} (${g.samples.length}样)</option>`).join('');
+    let protoOptions = WB_STATE.protocols.extract.length === 0
+        ? '<option value="">默认参数 (5x Loading Buffer)</option>'
+        : WB_STATE.protocols.extract.map(p => `<option value="${p.id}" ${p.id === e.protocol_id?'selected':''}>${p.name}</option>`).join('');
 
     c.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -731,11 +815,15 @@ window.renderWbExtract = function() {
 }
 
 window._startNewWbExtract = function() {
-    if (WB_STATE.sampleGroups.length === 0 || WB_STATE.protocols.extract.length === 0) {
-        return showToast("请先在方案与样本组库中建立配置", "error");
+    let sampleGroups = wbGetUsableSampleGroups();
+    if (sampleGroups.length === 0) {
+        if (wbPendingSampleGroupHasSamples()) {
+            return wbNotifyBlocked("请先在样本组页点击“确认保存样本组配置”");
+        }
+        return wbNotifyBlocked("请先在 WB 样本组中保存至少 1 个样本");
     }
-    let sg = WB_STATE.sampleGroups[0];
-    let p = WB_STATE.protocols.extract[0];
+    let sg = sampleGroups[0];
+    let p = WB_STATE.protocols.extract[0] || { id: '', name: '默认提取配平参数', steps: [], lb_factor: 5 };
     
     window._curWbExtract = {
         name: `WB 提取配平 (基于 ${sg.name})`,
@@ -754,6 +842,9 @@ window._startNewWbExtract = function() {
         r2: 0
     };
     renderWbExtract();
+    if (WB_STATE.protocols.extract.length === 0 && typeof showToast === 'function') {
+        showToast("未检测到提取方案，已使用默认 5x Loading Buffer", "warning");
+    }
     autoSaveWbEx();
 }
 
@@ -763,12 +854,23 @@ window.wbUpdateExConfig = function(gid, pid) {
     
     if(gid) {
         let sg = WB_STATE.sampleGroups.find(x => x.id === gid);
+        if (!sg || !Array.isArray(sg.samples) || !sg.samples.some(sample => String(sample.name || '').trim())) return wbNotifyBlocked("所选 WB 样本组没有可用样本");
         e.group_id = gid;
         e.name = `WB 提取配平 (基于 ${sg.name})`;
         e.samples = JSON.parse(JSON.stringify(sg.samples));
     }
-    if(pid) {
+    if(pid !== null) {
+        if (!pid) {
+            e.protocol_id = '';
+            e.p_name = '默认提取配平参数';
+            e.bufferX = 5;
+            e.activeCheck = [];
+            renderWbExtract();
+            autoSaveWbEx();
+            return;
+        }
         let p = WB_STATE.protocols.extract.find(x => x.id === pid);
+        if (!p) return;
         e.protocol_id = pid;
         e.p_name = p.name;
         e.bufferX = p.lb_factor || 5;
@@ -896,31 +998,17 @@ window.renderWbElectro = function() {
     if(!c) return;
 
     let allEx = WB_STATE.logs.extract.filter(l => l.status === '已完成');
-    let noExt = allEx.length === 0;
     
     let historyHtml = `
         <div class="divider"></div>
-        <div class="section-title"><i class="ti ti-history"></i> 进行中与已完成记录</div>
-        <div id="wbElHistory">
-            ${WB_STATE.logs.electrophoresis.length === 0 ? '<div class="empty-state">暂无记录</div>' : WB_STATE.logs.electrophoresis.map(e => {
-                return `
-                    <div class="event-card ${e.status==='已完成'?'done':''}" onclick="loadWbElectroState('${e.id}')" style="cursor:pointer">
-                        <div class="event-card-icon"><i class="ti ${e.status==='已完成'?'ti-check':'ti-loader'}"></i></div>
-                        <div class="event-card-body">
-                            <div style="font-weight:700">${e.name}</div>
-                            <div style="font-size:12px;opacity:0.8;margin-top:2px">${e.status} | 规格: ${e.numWells}孔梳 | 梳孔排版完毕</div>
-                        </div>
-                        <button class="btn btn-sm btn-danger" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:2px 6px;" onclick="event.stopPropagation();deleteWbItem('electrophoresis','logs','${e.id}', event)"><i class="ti ti-trash"></i></button>
-                    </div>
-                `;
-            }).join('')}
-        </div>
+        <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
+        <div id="wbElHistory">${wbBuildStageHistory('electrophoresis')}</div>
     `;
 
     if (!window._curWbElectro) {
         c.innerHTML = `
             <div class="card" style="margin-top:8px;">
-                <button class="btn btn-primary btn-block" onclick="_startNewWbElectro()" ${noExt?'disabled title="需要前置提取步骤"':''}><i class="ti ti-player-play"></i> 开始跑胶与转膜</button>
+                <button class="btn btn-primary btn-block" onclick="_startNewWbElectro()"><i class="ti ti-player-play"></i> 开始跑胶与转膜</button>
             </div>
             ${historyHtml}
         `;
@@ -928,22 +1016,11 @@ window.renderWbElectro = function() {
     }
 
     let e = window._curWbElectro;
-    let p = WB_STATE.protocols.electrophoresis.find(x => x.id === e.protocol_id);
-    let st = p ? p.steps : [];
+    let p = WB_STATE.protocols.electrophoresis.find(x => x.id === e.protocol_id) || { id: '', name: e.p_name || '默认跑胶转膜参数', steps: [] };
+    let st = p.steps || [];
     
-    // Checkbox mapping
     let checkArr = e.activeCheck || [];
-    let stepsHtml = st.length === 0 ? '' : `
-        <details class="pcr-step-container">
-            <summary class="pcr-step-summary"><i class="ti ti-list-check"></i> 制胶跑胶转膜 操作清单 (展开)</summary>
-            ${st.map((step, i) => `
-                <div class="pcr-step-item">
-                    <input type="checkbox" id="wbel_chk_${i}" class="pcr-step-cb" ${checkArr[i]?'checked':''} onchange="wbUpdateElCheck(${i}, this.checked)">
-                    <label for="wbel_chk_${i}" class="pcr-step-label">${step}</label>
-                </div>
-            `).join('')}
-        </details>
-    `;
+    let stepsHtml = wbBuildStepChecklist(st, checkArr, 'wbelStep', 'wbUpdateElCheck', '实验步骤提示 / Protocol Steps');
 
     // Extract samples to drop
     let smpList = WB_STATE.logs.extract.find(x => x.id === e.extract_id)?.samples || [];
@@ -978,7 +1055,9 @@ window.renderWbElectro = function() {
     `).join('');
 
     let srcOptions = allEx.map(l => `<option value="${l.id}" ${l.id === e.extract_id?'selected':''}>${l.name}</option>`).join('');
-    let protoOptions = WB_STATE.protocols.electrophoresis.map(p => `<option value="${p.id}" ${p.id === e.protocol_id?'selected':''}>${p.name}</option>`).join('');
+    let protoOptions = WB_STATE.protocols.electrophoresis.length === 0
+        ? '<option value="">默认参数（无步骤提示）</option>'
+        : WB_STATE.protocols.electrophoresis.map(p => `<option value="${p.id}" ${p.id === e.protocol_id?'selected':''}>${p.name}</option>`).join('');
 
     c.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -1041,12 +1120,12 @@ window.renderWbElectro = function() {
 
 window._startNewWbElectro = function() {
     let allEx = WB_STATE.logs.extract.filter(l => l.status === '已完成');
-    if (allEx.length === 0 || WB_STATE.protocols.electrophoresis.length === 0) {
-        return showToast("请先在方案库建制胶方案，并完成至少一次提蛋白", "error");
+    if (allEx.length === 0) {
+        return wbNotifyBlocked("请先完成至少一次 WB 提取配平实验");
     }
     
     let ex = allEx[0];
-    let p = WB_STATE.protocols.electrophoresis[0];
+    let p = WB_STATE.protocols.electrophoresis[0] || { id: '', name: '默认跑胶转膜参数', steps: [] };
     let w = "15";
     
     let laneMap = new Array(parseInt(w)).fill(null);
@@ -1062,6 +1141,9 @@ window._startNewWbElectro = function() {
         laneMap: laneMap
     };
     renderWbElectro();
+    if (WB_STATE.protocols.electrophoresis.length === 0 && typeof showToast === 'function') {
+        showToast("未检测到跑胶转膜方案，步骤提示为空", "warning");
+    }
     autoSaveWbEl();
 }
 
@@ -1075,8 +1157,17 @@ window.wbUpdateElConfig = function(exid, pid, wells) {
         e.name = `WB 凝胶电泳 (${ex.name})`;
         e.laneMap = new Array(parseInt(e.numWells)).fill(null); // reset lanes if source changes
     }
-    if(pid) {
+    if(pid !== null) {
+        if (!pid) {
+            e.protocol_id = '';
+            e.p_name = '默认跑胶转膜参数';
+            e.activeCheck = [];
+            renderWbElectro();
+            autoSaveWbEl();
+            return;
+        }
         let p = WB_STATE.protocols.electrophoresis.find(x => x.id === pid);
+        if (!p) return;
         e.protocol_id = pid;
         e.p_name = p.name;
         e.activeCheck = [];
@@ -1204,29 +1295,15 @@ window.renderWbDetect = function() {
 
     if (!window._curWbDetect) {
         let allEl = WB_STATE.logs.electrophoresis.filter(l => l.status === '已完成');
-        let noEl = allEl.length === 0;
         let historyHtml = `
             <div class="divider"></div>
-            <div class="section-title"><i class="ti ti-history"></i> 进行中与已完成记录</div>
-            <div id="wbDtHistory">
-                ${WB_STATE.logs.detection.length === 0 ? '<div class="empty-state">暂无记录</div>' : WB_STATE.logs.detection.map(e => {
-                    return `
-                        <div class="event-card ${e.status==='已完成'?'done':''}" onclick="loadWbDetectState('${e.id}')" style="cursor:pointer">
-                            <div class="event-card-icon"><i class="ti ${e.status==='已完成'?'ti-check':'ti-loader'}"></i></div>
-                            <div class="event-card-body">
-                                <div style="font-weight:700">${e.name}</div>
-                                <div style="font-size:12px;opacity:0.8;margin-top:2px">${e.status} | 检测靶标数量: ${e.strips.length}</div>
-                            </div>
-                            <button class="btn btn-sm btn-danger" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:2px 6px;" onclick="event.stopPropagation();deleteWbItem('detection','logs','${e.id}', event)"><i class="ti ti-trash"></i></button>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
+            <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
+            <div id="wbDtHistory">${wbBuildStageHistory('detection')}</div>
         `;
 
         c.innerHTML = `
             <div class="card" style="margin-top:8px;">
-                <button class="btn btn-primary btn-block" onclick="_startNewWbDetect()" ${noEl?'disabled title="需要前置跑胶转膜步骤"':''}><i class="ti ti-player-play"></i> 开始裁膜与抗体匹配监控</button>
+                <button class="btn btn-primary btn-block" onclick="_startNewWbDetect()"><i class="ti ti-player-play"></i> 开始裁膜与抗体匹配监控</button>
             </div>
             ${historyHtml}
         `;
@@ -1234,7 +1311,7 @@ window.renderWbDetect = function() {
     }
 
     let e = window._curWbDetect;
-    let workflow = WB_STATE.protocols.detectionWorkflows.find(x => x.id === e.workflow_id);
+    let workflow = WB_STATE.protocols.detectionWorkflows.find(x => x.id === e.workflow_id) || { id: '', name: e.workflow_name || '默认检测流程', steps: [] };
     let workflowSteps = workflow ? (workflow.steps || []) : [];
     let workflowChecks = Array.isArray(e.activeCheck) ? e.activeCheck : new Array(workflowSteps.length).fill(false);
     
@@ -1298,18 +1375,10 @@ window.renderWbDetect = function() {
 
     let allEl = WB_STATE.logs.electrophoresis.filter(l => l.status === '已完成');
     let srcOptions = allEl.map(l => `<option value="${l.id}" ${l.id === e.electro_id?'selected':''}>${l.name}</option>`).join('');
-    let workflowOptions = WB_STATE.protocols.detectionWorkflows.map(l => `<option value="${l.id}" ${l.id === e.workflow_id?'selected':''}>${l.name}</option>`).join('');
-    let workflowHtml = workflowSteps.length === 0 ? '' : `
-        <details class="pcr-step-container" open>
-            <summary class="pcr-step-summary"><i class="ti ti-list-check"></i> 检测流程清单</summary>
-            ${workflowSteps.map((step, i) => `
-                <div class="pcr-step-item">
-                    <input type="checkbox" id="wbdt_flow_chk_${i}" class="pcr-step-cb" ${workflowChecks[i] ? 'checked' : ''} onchange="wbUpdateDtCheck(${i}, this.checked)">
-                    <label for="wbdt_flow_chk_${i}" class="pcr-step-label">${step}</label>
-                </div>
-            `).join('')}
-        </details>
-    `;
+    let workflowOptions = WB_STATE.protocols.detectionWorkflows.length === 0
+        ? '<option value="">默认检测流程（无步骤提示）</option>'
+        : WB_STATE.protocols.detectionWorkflows.map(l => `<option value="${l.id}" ${l.id === e.workflow_id?'selected':''}>${l.name}</option>`).join('');
+    let workflowHtml = wbBuildStepChecklist(workflowSteps, workflowChecks, 'wbdtFlowStep', 'wbUpdateDtCheck', '实验步骤提示 / Protocol Steps');
 
     c.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -1327,11 +1396,15 @@ window.renderWbDetect = function() {
             <div class="form-group">
                 <label class="form-label">检测流程方案</label>
                 <select class="form-select" onchange="wbUpdateDtWorkflow(this.value)">
-                    ${workflowOptions || '<option value="">-- 请先在方案库建立检测流程方案 --</option>'}
+                    ${workflowOptions}
                 </select>
             </div>
         </div>
         ${workflowHtml}
+        <div class="form-group">
+            <label class="form-label"><i class="ti ti-cut"></i> 裁膜 / Marker 刻度备注</label>
+            <textarea class="form-textarea" placeholder="例如：70kDa 与 55kDa 之间裁开；上半膜孵育目标蛋白，下半膜孵育内参" oninput="wbUpdateDtCutNote(this.value)">${e.cut_note || ''}</textarea>
+        </div>
         
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
             <label class="form-label" style="margin:0;"><i class="ti ti-swatches"></i> 裁膜独立孵育管区</label>
@@ -1352,11 +1425,10 @@ window.renderWbDetect = function() {
 
 window._startNewWbDetect = function() {
     let allEl = WB_STATE.logs.electrophoresis.filter(l => l.status === '已完成');
-    if (allEl.length === 0) return showToast("请先完成至少一块胶的电泳转膜流程", "error");
-    if (WB_STATE.protocols.detectionWorkflows.length === 0) return showToast("请先在方案库建立检测流程方案", "error");
+    if (allEl.length === 0) return wbNotifyBlocked("请先完成至少一块胶的跑胶转膜流程");
     
     let el = allEl[0];
-    let workflow = WB_STATE.protocols.detectionWorkflows[0];
+    let workflow = WB_STATE.protocols.detectionWorkflows[0] || { id: '', name: '默认检测流程', steps: [] };
     
     window._curWbDetect = {
         name: `WB 裁膜显影 (${el.name})`,
@@ -1365,9 +1437,13 @@ window._startNewWbDetect = function() {
         workflow_id: workflow.id,
         workflow_name: workflow.name,
         activeCheck: new Array((workflow.steps || []).length).fill(false),
+        cut_note: '',
         strips: []
     };
     renderWbDetect();
+    if (WB_STATE.protocols.detectionWorkflows.length === 0 && typeof showToast === 'function') {
+        showToast("未检测到检测流程方案，步骤提示为空", "warning");
+    }
     wbAddStrip();
 }
 
@@ -1388,6 +1464,15 @@ window.wbUpdateDtWorkflow = function(workflowId) {
     let e = window._curWbDetect;
     if(!e) return;
 
+    if (!workflowId) {
+        e.workflow_id = '';
+        e.workflow_name = '默认检测流程';
+        e.activeCheck = [];
+        renderWbDetect();
+        autoSaveWbDt();
+        return;
+    }
+
     let workflow = WB_STATE.protocols.detectionWorkflows.find(x => x.id === workflowId);
     if(workflow) {
         e.workflow_id = workflow.id;
@@ -1396,6 +1481,12 @@ window.wbUpdateDtWorkflow = function(workflowId) {
     }
     renderWbDetect();
     autoSaveWbDt();
+}
+
+window.wbUpdateDtCutNote = function(value) {
+    if (!window._curWbDetect) return;
+    window._curWbDetect.cut_note = value;
+    autoSaveWbDt(true);
 }
 
 window.wbAddStrip = function() {
@@ -1462,4 +1553,161 @@ window.loadWbDetectState = function(id) {
         window._curWbDetect = wbHydrateDetectLog(JSON.parse(JSON.stringify(l)));
         renderWbDetect();
     }
+}
+
+function _buildWbSampleGroupDetail(d) {
+    let rows = (d.samples || []).map(s => `<tr>
+        <td style="font-weight:700">${s.name || '-'}</td>
+        <td>${s.group || '-'}</td>
+        <td>${s.note || '-'}</td>
+    </tr>`).join('');
+    return `
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-info-circle"></i> 基本信息</div>
+        ${wbRdRow(wbRdField('来源 / 备注', d.source || '-'), wbRdField('包含样本数', (d.samples || []).length + ' 个'))}
+        ${wbRdField('创建时间', (d.created_at || '').substring(0, 16))}
+    </div>
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-list"></i> 样本列表</div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table class="cal-data-table" style="font-size:12px;text-align:center;">
+                <thead><tr><th>样本名称</th><th>处理 / 组别</th><th>备注</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3">无样本</td></tr>'}</tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
+function _buildWbExtractDetail(d) {
+    let sampleGroup = (WB_STATE.sampleGroups || []).find(g => g.id === d.group_id);
+    let steps = wbResolveSteps('extract', d);
+    let standards = Array.isArray(d.stds) ? d.stds : [];
+    let standardRows = [0, 0.125, 0.25, 0.5, 1.0, 2.0].map((x, i) => `<tr><td>${x}</td><td>${standards[i] || '-'}</td></tr>`).join('');
+    let bufferX = Number(d.bufferX || 5);
+    let targetMass = Number(d.targetMass || 30);
+    let targetVol = Number(d.targetVol || 15);
+    let sampleRows = (d.samples || []).map(s => {
+        let conc = Number(s.conc || 0);
+        if (!conc && s.od && d.eq_k && d.eq_k > 0) conc = Math.max(0, (Number(s.od) - Number(d.eq_b || 0)) / Number(d.eq_k));
+        let mix = '-';
+        if (conc > 0) {
+            let proteinVol = targetMass / conc;
+            let bufferVol = targetVol / bufferX;
+            let ripaVol = targetVol - proteinVol - bufferVol;
+            mix = ripaVol < 0
+                ? `<span style="color:var(--danger);font-weight:700">蛋白液 ${proteinVol.toFixed(1)} μL，超出目标体积</span>`
+                : `${proteinVol.toFixed(1)} / ${ripaVol.toFixed(1)} / ${bufferVol.toFixed(1)}`;
+        }
+        return `<tr>
+            <td style="font-weight:700">${s.name || '-'}</td>
+            <td>${s.group || s.note || '-'}</td>
+            <td>${s.od || '-'}</td>
+            <td>${conc > 0 ? conc.toFixed(2) : '-'}</td>
+            <td>${mix}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-droplet"></i> WB 提取配平</div>
+        ${wbRdRow(wbRdField('实验名称', d.name), wbRdField('时间', (d.created_at || d.timestamp || '').substring(0, 16)))}
+        ${wbRdRow(wbRdField('状态', wbStatusBadge(d.status)), wbRdField('来源样本组', sampleGroup ? sampleGroup.name : d.group_id))}
+        ${wbRdRow(wbRdField('提取方案', d.p_name || d.protocol_name || '默认参数'), wbRdField('上样缓冲', `${bufferX}x`))}
+        ${wbRdRow(wbRdField('目标上样质量', `${targetMass} μg`), wbRdField('目标孔体积', `${targetVol} μL`))}
+    </div>
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-chart-line"></i> BCA 标准曲线</div>
+        ${wbRdRow(wbRdField('斜率 k', d.eq_k ? Number(d.eq_k).toFixed(4) : '-'), wbRdField('截距 b', d.eq_b ? Number(d.eq_b).toFixed(4) : '-'))}
+        ${wbRdField('R²', d.r2 ? Number(d.r2).toFixed(4) : '-')}
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table class="cal-data-table" style="font-size:12px;text-align:center;">
+                <thead><tr><th>标准浓度 (μg/μL)</th><th>OD</th></tr></thead>
+                <tbody>${standardRows}</tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-table"></i> 样本浓度与配平表</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">配平列格式：蛋白液 / RIPA / Loading Buffer，单位 μL。</div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table class="cal-data-table" style="font-size:12px;text-align:center;">
+                <thead><tr><th>样本</th><th>组别/备注</th><th>净OD</th><th>浓度</th><th>配平加液</th></tr></thead>
+                <tbody>${sampleRows || '<tr><td colspan="5">无样本数据</td></tr>'}</tbody>
+            </table>
+        </div>
+    </div>
+    ${wbBuildReadonlySteps(steps, d.activeCheck || [])}`;
+}
+
+function _buildWbElectroDetail(d) {
+    let extract = (WB_STATE.logs.extract || []).find(x => x.id === d.extract_id);
+    let samples = extract ? (extract.samples || []) : [];
+    let steps = wbResolveSteps('electrophoresis', d);
+    let lanes = Array.isArray(d.laneMap) ? d.laneMap : [];
+    let laneHtml = lanes.map((id, i) => {
+        let label = '空';
+        let style = 'background:var(--surface-hover);color:var(--text-tertiary);border:1px solid var(--border);';
+        if (id === 'MARKER') {
+            label = 'Marker';
+            style = 'background:#5a67d8;color:#fff;border:1px solid #4c51bf;';
+        } else if (id) {
+            let sample = samples.find(s => s.id === id);
+            label = sample ? sample.name : id;
+            style = 'background:var(--accent);color:#fff;border:1px solid var(--accent);';
+        }
+        return `<div style="min-width:54px;flex:1;border:1px dashed var(--border);border-radius:6px;padding:5px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:4px;">#${i + 1}</div>
+            <div style="${style}border-radius:5px;padding:6px 4px;font-size:10px;font-weight:700;min-height:30px;display:flex;align-items:center;justify-content:center;word-break:break-word;">${label}</div>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-layout-columns"></i> WB 跑胶转膜</div>
+        ${wbRdRow(wbRdField('实验名称', d.name), wbRdField('时间', (d.created_at || d.timestamp || '').substring(0, 16)))}
+        ${wbRdRow(wbRdField('状态', wbStatusBadge(d.status)), wbRdField('来源提取记录', extract ? extract.name : d.extract_id))}
+        ${wbRdRow(wbRdField('跑胶转膜方案', d.p_name || '默认参数'), wbRdField('电泳梳规格', `${d.numWells || lanes.length || '-'} 孔`))}
+    </div>
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-layout-grid"></i> 凝胶孔位排版</div>
+        <div style="display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">${laneHtml || '<span style="font-size:12px;color:var(--text-tertiary)">无排版数据</span>'}</div>
+    </div>
+    ${wbBuildReadonlySteps(steps, d.activeCheck || [])}`;
+}
+
+function _buildWbDetectDetail(d) {
+    let electro = (WB_STATE.logs.electrophoresis || []).find(x => x.id === d.electro_id);
+    let steps = wbResolveSteps('detection', d);
+    let stripRows = (d.strips || []).map((st, i) => {
+        let antibody = (WB_STATE.protocols.detection || []).find(x => x.id === st.ab_id);
+        let ratio = st.ratio || (antibody ? wbGetAntibodyDefaultRatio(antibody) : '');
+        let stockVol = ratio ? (Number(st.vol || 0) * 1000 / Number(ratio)).toFixed(1) : '-';
+        return `<tr>
+            <td style="font-weight:700">#${i + 1}</td>
+            <td>${antibody ? wbBuildAntibodyTitle(antibody) : (st.ab_id || '未选择')}</td>
+            <td>${st.vol || '-'} mL</td>
+            <td>${ratio ? '1:' + ratio : '-'}</td>
+            <td>${stockVol}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-cut"></i> WB 裁膜显影</div>
+        ${wbRdRow(wbRdField('实验名称', d.name), wbRdField('时间', (d.created_at || d.timestamp || '').substring(0, 16)))}
+        ${wbRdRow(wbRdField('状态', wbStatusBadge(d.status)), wbRdField('来源转膜记录', electro ? electro.name : d.electro_id))}
+        ${wbRdField('检测流程方案', d.workflow_name || '默认检测流程')}
+        ${d.cut_note ? wbRdField('裁膜 / Marker 刻度备注', `<div style="white-space:pre-wrap;">${d.cut_note}</div>`, true) : ''}
+    </div>
+    <div class="card" style="margin-bottom:8px;">
+        <div class="card-header"><i class="ti ti-swatches"></i> 抗体孵育计算</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">原液用量单位为 μL。</div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+            <table class="cal-data-table" style="font-size:12px;text-align:center;">
+                <thead><tr><th>条带</th><th>抗体</th><th>孵育液</th><th>比例</th><th>原液</th></tr></thead>
+                <tbody>${stripRows || '<tr><td colspan="5">无抗体条目</td></tr>'}</tbody>
+            </table>
+        </div>
+    </div>
+    ${wbBuildReadonlySteps(steps, d.activeCheck || [])}`;
 }

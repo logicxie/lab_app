@@ -325,6 +325,7 @@ window.buildRecordDetailHTML = function (type, data) {
     if (type === 'pcr_rt') return _buildRtDetail(data);
     if (type === 'pcr_qpcr') return _buildQpcrDetail(data);
     if (type === 'pcr_sample_group') return _buildPcrSampleGroupDetail(data);
+    if (type === 'wb_sample_group') return typeof _buildWbSampleGroupDetail === 'function' ? _buildWbSampleGroupDetail(data) : '';
     if (type === 'dilution') return _buildDilutionDetail(data);
     if (type === 'wb_extract') return typeof _buildWbExtractDetail === 'function' ? _buildWbExtractDetail(data) : '';
     if (type === 'wb_electro') return typeof _buildWbElectroDetail === 'function' ? _buildWbElectroDetail(data) : '';
