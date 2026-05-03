@@ -18,6 +18,17 @@ const JN_TYPE_META = {
     wb_extract: { color: '#007aff', bg: 'rgba(0,122,255,0.15)', icon: 'ti-droplet', label: 'WB 提取' },
     wb_electro: { color: '#5856d6', bg: 'rgba(88,86,214,0.15)', icon: 'ti-layout-columns', label: 'WB 跑胶' },
     wb_detect: { color: '#ff2d55', bg: 'rgba(255,45,85,0.15)', icon: 'ti-cut', label: 'WB 洗膜' },
+    sample: { color: '#0a84ff', bg: 'rgba(10,132,255,0.15)', icon: 'ti-database', label: '样本' },
+    animal_log: { color: '#c87a3a', bg: 'rgba(200,122,58,0.15)', icon: 'ti-vaccine', label: '动物' },
+    if_log: { color: '#7c3aed', bg: 'rgba(124,58,237,0.15)', icon: 'ti-microscope', label: 'IF' },
+    bioinfo_log: { color: '#0a84ff', bg: 'rgba(10,132,255,0.15)', icon: 'ti-chart-dots-3', label: '生信' },
+    other_log: { color: '#629987', bg: 'rgba(98,153,135,0.15)', icon: 'ti-tool', label: '其他' },
+    cell_harvest_log: { color: '#d97757', bg: 'rgba(217,119,87,0.15)', icon: 'ti-vials', label: '细胞取样' },
+    animal_harvest_log: { color: '#c87a3a', bg: 'rgba(200,122,58,0.15)', icon: 'ti-database-plus', label: '动物取材' },
+    patient_harvest_log: { color: '#c46686', bg: 'rgba(196,102,134,0.15)', icon: 'ti-user-heart', label: '患者取材' },
+    sendout_log: { color: '#6a9bcc', bg: 'rgba(106,155,204,0.15)', icon: 'ti-truck-delivery', label: '送样' },
+    primer_antibody_log: { color: '#827dbd', bg: 'rgba(130,125,189,0.15)', icon: 'ti-vaccine-bottle', label: '抗体引物' },
+    reagent_log: { color: '#629987', bg: 'rgba(98,153,135,0.15)', icon: 'ti-bottle', label: '试剂' },
 };
 
 // ── 初始化 ──
@@ -36,7 +47,7 @@ function jnRenderEntries() {
     let el = document.getElementById('jnEntries');
     if (!el) return;
     if (JN.entries.length === 0) {
-        el.innerHTML = '<div style="font-size:12px;color:var(--text-tertiary);padding:6px 0 12px;">暂无关联条目，点击下方按钮添加</div>';
+        el.innerHTML = '<div style="font-size:12px;color:var(--text-tertiary);padding:6px 0 12px;">未关联实验条目</div>';
         return;
     }
     el.innerHTML = JN.entries.map((en, i) => {
@@ -117,7 +128,7 @@ window.jnAddTodayRecords = async function () {
     try {
         let all = await _jnFetchAllRecords();
         let todayRecs = all.filter(r => r.date === today);
-        if (todayRecs.length === 0) { showToast('今日暂无实验记录', 'warning'); return; }
+        if (todayRecs.length === 0) { showToast('今日无实验记录', 'warning'); return; }
 
         let added = 0;
         todayRecs.forEach(r => {
@@ -148,11 +159,11 @@ async function _jnFetchAllRecords() {
 }
 
 function jnShowPickerModal(records) {
-    // 移除旧的
+    // 移除当前选择器实例
     let old = document.getElementById('jnPickerModal');
     if (old) old.remove();
 
-    let typeOrder = ['experiment', 'passage', 'pcr_qpcr', 'pcr_rt', 'pcr_rna', 'wb_detect', 'wb_electro', 'wb_extract'];
+    let typeOrder = ['experiment', 'cell_harvest_log', 'animal_log', 'animal_harvest_log', 'patient_harvest_log', 'sample', 'if_log', 'bioinfo_log', 'sendout_log', 'other_log', 'primer_antibody_log', 'reagent_log', 'passage', 'pcr_qpcr', 'pcr_rt', 'pcr_rna', 'wb_detect', 'wb_electro', 'wb_extract'];
     let grouped = {};
     typeOrder.forEach(t => { grouped[t] = []; });
     records.forEach(r => { if (grouped[r.type]) grouped[r.type].push(r); });
@@ -182,20 +193,7 @@ function jnShowPickerModal(records) {
         </div>`;
     }).join('');
 
-    let modal = document.createElement('div');
-    modal.id = 'jnPickerModal';
-    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99998;display:flex;align-items:flex-end;`;
-    modal.innerHTML = `
-        <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-height:80vh;overflow-y:auto;padding:20px 16px 32px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <div style="font-size:16px;font-weight:700">选取实验记录</div>
-                <button onclick="document.getElementById('jnPickerModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-secondary)">&times;</button>
-            </div>
-            <div id="jnPickerContent">${groupsHtml || '<div style="color:var(--text-tertiary);text-align:center;padding:24px">暂无记录</div>'}</div>
-        </div>
-    `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-    document.body.appendChild(modal);
+    uiOpenSheet('jnPickerModal', '选取实验记录', `<div id="jnPickerContent">${groupsHtml || '<div style="color:var(--text-tertiary);text-align:center;padding:24px">暂无记录</div>'}</div>`);
 
     // 存记录到全局供选取函数使用
     window._jnPickerRecords = records;

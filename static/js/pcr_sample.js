@@ -16,6 +16,7 @@ window.renderPcrSample = function() {
         let exp = window._curSgExp;
         let tableRows = exp.samples.map((s, idx) => `
             <tr>
+                <td><button class="btn btn-sm btn-danger" onclick="_removeSgRow(${idx})"><i class="ti ti-x"></i></button></td>
                 <td style="font-weight:bold">${s.name}</td>
                 <td>
                     <select class="form-select" onchange="window._curSgExp.samples[${idx}].group=this.value">
@@ -23,8 +24,7 @@ window.renderPcrSample = function() {
                         ${STATE.drugProtocols.map(p=>`<option value="${p.name}" ${s.group===p.name?'selected':''}>${p.name}</option>`).join('')}
                     </select>
                 </td>
-                <td><input type="text" class="form-input" style="width:80px" value="${s.day||''}" placeholder="例如: 1d" onchange="window._curSgExp.samples[${idx}].day=this.value"></td>
-                <td><button class="btn btn-sm btn-danger" onclick="_removeSgRow(${idx})"><i class="ti ti-x"></i></button></td>
+                <td><input type="text" class="form-input" style="width:80px" value="${s.day||''}" placeholder="1d" onchange="window._curSgExp.samples[${idx}].day=this.value"></td>
             </tr>
         `).join('');
 
@@ -49,7 +49,7 @@ window.renderPcrSample = function() {
                     </div>
                     <div class="form-group">
                         <label class="form-label">整体设计方案</label>
-                        <input class="form-input" value="${exp.scheme||''}" placeholder="如: TGF-b诱导" oninput="window._curSgExp.scheme=this.value">
+                        <input class="form-input" value="${exp.scheme||''}" placeholder="TGF-b诱导" oninput="window._curSgExp.scheme=this.value">
                     </div>
                 </div>
 
@@ -59,10 +59,10 @@ window.renderPcrSample = function() {
                     <table class="rt-table">
                         <thead>
                             <tr>
+                                <th>操作</th>
                                 <th>样本名称</th>
                                 <th>包含组别</th>
                                 <th>诱导天数/时间</th>
-                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>${tableRows}</tbody>
@@ -71,7 +71,7 @@ window.renderPcrSample = function() {
                 
                 <!-- Quick Add single sample -->
                 <div class="form-row" style="margin-top:12px;">
-                    <div class="form-group"><input type="text" id="sgAddSn" class="form-input" placeholder="新样本 (如 S4)"></div>
+                    <div class="form-group"><input type="text" id="sgAddSn" class="form-input" placeholder="样本 S4"></div>
                     <button class="btn btn-secondary" onclick="_addSgRow()"><i class="ti ti-plus"></i> 添加一行</button>
                 </div>
                 
@@ -112,7 +112,7 @@ window.startSgExperiment = function() {
 window._addSgRow = function() {
     if(!window._curSgExp) return;
     let sn = document.getElementById('sgAddSn').value.trim();
-    if(!sn) { showToast('请输入样本名','warning'); return; }
+    if(!sn) { showToast('需填写样本名','warning'); return; }
     window._curSgExp.samples.push({ name: sn, group: "Control", day: "" });
     renderPcrSample();
 }
@@ -134,7 +134,7 @@ window.editSampleGroupP = function(id) {
 
 window.finishSgExperiment = async function() {
     if(!window._curSgExp) return;
-    if(!window._curSgExp.name) return showToast("请填写样本组名称", "error");
+    if(!window._curSgExp.name) return showToast("需填写样本组名称", "error");
     if(!window._curSgExp.samples || window._curSgExp.samples.length === 0) return showToast("请至少添加一个样本", "error");
     
     let groupData = window._curSgExp;

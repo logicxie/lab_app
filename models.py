@@ -5,9 +5,9 @@
 import numpy as np
 
 
-def logistic_model(X, r):
+def gompertz_model(X, r):
     """
-    Gompertz 生长模型（原为Logistic，接口名保持兼容）：预测细胞经过 t 小时后的密度
+    Gompertz 生长模型：预测细胞经过 t 小时后的密度
     K = 100%（满板），r 为生长速率常数
     公式: N_t = K * exp( ln(N0/K) * exp(-r*t) )
     """

@@ -1,5 +1,5 @@
 /* ============================================================
-   app.js — 实验小助手 v2 前端逻辑
+    app.js — 实验流程管理平台前端逻辑
    ============================================================ */
 
 // 全局配置变量
@@ -19,6 +19,366 @@ let STATE = {
     drugProtocols: [],
     drugPlates: [],
     mwLibrary: []
+};
+
+let AUTH_USER = null;
+
+document.addEventListener('click', (event) => {
+    let summary = event.target.closest('.workflow-steps-details > summary');
+    if (!summary) return;
+    let details = summary.parentElement;
+    event.preventDefault();
+    if (details.dataset.animating === '1') return;
+    details.dataset.animating = '1';
+    if (details.open) {
+        details.classList.remove('opening');
+        details.classList.add('closing');
+        setTimeout(() => {
+            details.open = false;
+            details.classList.remove('closing');
+            details.dataset.animating = '';
+        }, 180);
+    } else {
+        details.open = true;
+        details.classList.add('opening');
+        setTimeout(() => {
+            details.classList.remove('opening');
+            details.dataset.animating = '';
+        }, 180);
+    }
+});
+
+window.uiOpenSheet = function(id, title, bodyHtml) {
+    let old = document.getElementById(id);
+    if (old) old.remove();
+    let modal = document.createElement('div');
+    modal.id = id;
+    modal.className = 'sheet-modal';
+    modal.innerHTML = `
+        <div class="sheet-panel">
+            <div class="sheet-header">
+                <div class="sheet-title">${title}</div>
+                <button class="btn btn-icon btn-ghost" onclick="uiCloseSheet('${id}')" aria-label="关闭"><i class="ti ti-x"></i></button>
+            </div>
+            ${bodyHtml}
+        </div>`;
+    modal.addEventListener('click', event => { if (event.target === modal) uiCloseSheet(id); });
+    document.body.appendChild(modal);
+    return modal;
+};
+
+window.uiCloseSheet = function(id) {
+    let modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.add('closing');
+    setTimeout(() => modal.remove(), 160);
+};
+
+const LAB_TIMER_STORAGE_KEY = 'v2_app_lab_step_timers_v1';
+let LAB_TIMERS = {};
+let LAB_TIMER_AUDIO_CONTEXT = null;
+
+function labTimerLoadState() {
+    try {
+        LAB_TIMERS = JSON.parse(localStorage.getItem(LAB_TIMER_STORAGE_KEY) || '{}') || {};
+    } catch (e) {
+        LAB_TIMERS = {};
+    }
+}
+
+function labTimerSaveState() {
+    try { localStorage.setItem(LAB_TIMER_STORAGE_KEY, JSON.stringify(LAB_TIMERS)); } catch (e) {}
+}
+
+function labTimerSeconds(value) {
+    let seconds = Number(value || 0);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
+}
+
+function labTimerRemaining(timer) {
+    if (!timer) return 0;
+    if (timer.status === 'running') return Math.max(0, Math.ceil((Number(timer.endAt || 0) - Date.now()) / 1000));
+    return Math.max(0, Math.round(Number(timer.remaining || 0)));
+}
+
+function labTimerFormat(seconds) {
+    let total = Math.max(0, Math.round(Number(seconds || 0)));
+    let hours = Math.floor(total / 3600);
+    let minutes = Math.floor((total % 3600) / 60);
+    let secs = total % 60;
+    if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function protocolDurationLabel(seconds) {
+    let total = Math.max(0, Math.round(Number(seconds || 0)));
+    if (!total) return '未设置';
+    let hours = Math.floor(total / 3600);
+    let minutes = Math.round((total % 3600) / 60);
+    if (hours && minutes) return `${hours}小时${minutes}分钟`;
+    if (hours) return `${hours}小时`;
+    if (total >= 60) return `${Math.round(total / 60)}分钟`;
+    return `${total}秒`;
+}
+
+function labTimerNormalizeList(timers, length) {
+    let source = Array.isArray(timers) ? timers : [];
+    return Array.from({ length }, (_, index) => labTimerSeconds(source[index]));
+}
+
+function labTimerUnlockAudio() {
+    try {
+        let AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!LAB_TIMER_AUDIO_CONTEXT) LAB_TIMER_AUDIO_CONTEXT = new AudioContextClass();
+        if (LAB_TIMER_AUDIO_CONTEXT.state === 'suspended') LAB_TIMER_AUDIO_CONTEXT.resume();
+    } catch (e) {}
+}
+
+function labTimerPlayAlert() {
+    labTimerUnlockAudio();
+    if (!LAB_TIMER_AUDIO_CONTEXT) return;
+    let ctx = LAB_TIMER_AUDIO_CONTEXT;
+    let now = ctx.currentTime;
+    [0, 0.32, 0.64].forEach(offset => {
+        let osc = ctx.createOscillator();
+        let gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.24, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.24);
+    });
+}
+
+function labTimerNotify(timer) {
+    let title = '实验步骤倒计时结束';
+    let body = timer.label || '有一个实验步骤计时已归零';
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try { new Notification(title, { body, tag: timer.key || body }); } catch (e) {}
+    }
+    if (navigator.vibrate) navigator.vibrate([360, 140, 360, 140, 520]);
+    labTimerPlayAlert();
+    if (typeof showToast === 'function') showToast(`${body} 已结束`, 'warning');
+}
+
+function labTimerStatusText(status) {
+    if (status === 'running') return '进行中';
+    if (status === 'paused') return '已暂停';
+    if (status === 'done') return '已结束';
+    return '未开始';
+}
+
+function labTimerWidgetInner(key, duration, label) {
+    let timer = LAB_TIMERS[key] || null;
+    let status = timer ? timer.status : 'idle';
+    let remaining = timer ? labTimerRemaining(timer) : duration;
+    let safeKey = protocolJsArg(key);
+    let safeLabel = protocolJsArg(label || '实验步骤');
+    let primary = status === 'running'
+        ? `<button type="button" class="btn btn-sm btn-secondary" onclick="labTimerPause('${safeKey}', event)" title="暂停"><i class="ti ti-player-pause"></i></button>`
+        : `<button type="button" class="btn btn-sm btn-secondary" onclick="labTimerStart('${safeKey}', ${duration}, '${safeLabel}', false, event)" title="开始"><i class="ti ti-player-play"></i></button>`;
+    return `<div class="step-timer-main">
+            <i class="ti ti-clock"></i>
+            <span>倒计时</span>
+            <b>${labTimerFormat(timer ? remaining : duration)}</b>
+            <small>${labTimerStatusText(status)}</small>
+        </div>
+        <div class="step-timer-actions">
+            ${primary}
+            <button type="button" class="btn btn-sm btn-secondary" onclick="labTimerRestart('${safeKey}', ${duration}, '${safeLabel}', event)" title="重新开始"><i class="ti ti-refresh"></i></button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="labTimerCancel('${safeKey}', event)" title="取消"><i class="ti ti-player-stop"></i></button>
+        </div>`;
+}
+
+function labTimerWidgetHtml(key, duration, label) {
+    if (!duration) return '';
+    return `<div class="step-timer" data-lab-timer-key="${protocolSafe(key)}" data-lab-timer-duration="${duration}" data-lab-timer-label="${protocolSafe(label)}">
+        ${labTimerWidgetInner(key, duration, label)}
+    </div>`;
+}
+
+function labTimerRenderAll() {
+    document.querySelectorAll('[data-lab-timer-key]').forEach(widget => {
+        let key = widget.dataset.labTimerKey;
+        let duration = labTimerSeconds(widget.dataset.labTimerDuration);
+        let label = widget.dataset.labTimerLabel || '实验步骤';
+        widget.innerHTML = labTimerWidgetInner(key, duration, label);
+    });
+}
+
+function labTimerTick() {
+    let changed = false;
+    Object.keys(LAB_TIMERS).forEach(key => {
+        let timer = LAB_TIMERS[key];
+        if (!timer || timer.status !== 'running') return;
+        let remaining = labTimerRemaining(timer);
+        if (remaining <= 0) {
+            timer.status = 'done';
+            timer.remaining = 0;
+            timer.completedAt = Date.now();
+            if (!timer.alerted) {
+                timer.alerted = true;
+                labTimerNotify(timer);
+            }
+            changed = true;
+        }
+    });
+    if (changed) labTimerSaveState();
+    labTimerRenderAll();
+}
+
+window.labTimerRequestPermission = function(event) {
+    if (event) event.stopPropagation();
+    labTimerUnlockAudio();
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            if (typeof showToast === 'function') showToast(permission === 'granted' ? '计时提醒通知已开启' : '通知未授权，仍会在页面内响铃提醒', permission === 'granted' ? 'success' : 'warning');
+        });
+    } else if (typeof showToast === 'function') {
+        showToast(('Notification' in window && Notification.permission === 'granted') ? '计时提醒已准备好' : '当前浏览器不支持系统通知，将使用页面提醒', 'info');
+    }
+    if (navigator.vibrate) navigator.vibrate(40);
+};
+
+window.labTimerStart = function(key, duration, label = '实验步骤', restart = false, event = null) {
+    if (event) event.stopPropagation();
+    duration = labTimerSeconds(duration);
+    if (!key || !duration) return;
+    labTimerUnlockAudio();
+    let current = LAB_TIMERS[key];
+    let remaining = restart || !current || current.status === 'done' ? duration : labTimerRemaining(current) || duration;
+    LAB_TIMERS[key] = {
+        key,
+        label,
+        duration,
+        remaining,
+        status: 'running',
+        endAt: Date.now() + remaining * 1000,
+        updatedAt: Date.now(),
+        alerted: false
+    };
+    labTimerSaveState();
+    labTimerRenderAll();
+};
+
+window.labTimerPause = function(key, event = null) {
+    if (event) event.stopPropagation();
+    let timer = LAB_TIMERS[key];
+    if (!timer) return;
+    timer.remaining = labTimerRemaining(timer);
+    timer.status = 'paused';
+    timer.updatedAt = Date.now();
+    labTimerSaveState();
+    labTimerRenderAll();
+};
+
+window.labTimerCancel = function(key, event = null) {
+    if (event) event.stopPropagation();
+    if (!key) return;
+    delete LAB_TIMERS[key];
+    labTimerSaveState();
+    labTimerRenderAll();
+};
+
+window.labTimerRestart = function(key, duration, label = '实验步骤', event = null) {
+    window.labTimerStart(key, duration, label, true, event);
+};
+
+window.labTimerHandleStepCheck = function(key, duration, label, checked) {
+    if (!checked || !duration) return;
+    let timer = LAB_TIMERS[key];
+    if (!timer || timer.status === 'idle' || timer.status === 'done') window.labTimerStart(key, duration, label, false, null);
+};
+
+labTimerLoadState();
+setInterval(labTimerTick, 1000);
+
+window.buildWorkflowStepChecklist = function(steps, checks = [], inputPrefix, onchangeName, title = '实验流程步骤', timers = []) {
+    if (!Array.isArray(steps) || steps.length === 0) return '';
+    let timerList = labTimerNormalizeList(timers, steps.length);
+    let hasTimers = timerList.some(Boolean);
+    return `<details class="workflow-steps-details">
+        <summary><i class="ti ti-info-circle"></i> ${title}</summary>
+        ${hasTimers ? `<div class="step-timer-permission"><span><i class="ti ti-bell"></i> 步骤计时结束后会响铃、通知，并在支持设备上振动。</span><button type="button" class="btn btn-sm btn-secondary" onclick="labTimerRequestPermission(event)">允许提醒</button></div>` : ''}
+        <div class="step-list">
+            ${steps.map((step, index) => {
+                let key = `${inputPrefix}:${index}`;
+                let label = `Step ${index + 1} · ${step}`;
+                return `
+                <div class="step-item ${(checks || [])[index] ? 'checked' : ''}" id="${protocolSafe(`${inputPrefix}Item_${index}`)}">
+                    <label class="step-item-main">
+                        <input type="checkbox" class="step-checkbox" ${(checks || [])[index] ? 'checked' : ''} onchange="labTimerHandleStepCheck('${protocolJsAttr(key)}', ${timerList[index]}, '${protocolJsAttr(label)}', this.checked);${onchangeName}(${index}, this.checked)">
+                        <span><b>Step ${index + 1}.</b> ${protocolSafe(step)}</span>
+                    </label>
+                    ${labTimerWidgetHtml(key, timerList[index], label)}
+                </div>`;
+            }).join('')}
+        </div>
+    </details>`;
+};
+
+window.buildReadonlyWorkflowSteps = function(steps, checks = [], title = '操作步骤', timers = []) {
+    if (!Array.isArray(steps) || !steps.length) return '';
+    let timerList = labTimerNormalizeList(timers, steps.length);
+    return `<div class="card" style="margin-bottom:8px;"><div class="card-header"><i class="ti ti-checklist"></i> ${title}</div>
+        ${steps.map((step, index) => `
+            <label class="step-item ${(checks || [])[index] ? 'checked' : ''}" style="pointer-events:none;opacity:${(checks || [])[index] ? 1 : 0.65};">
+                <input type="checkbox" class="step-checkbox" ${(checks || [])[index] ? 'checked' : ''} disabled>
+                <div><b>Step ${index + 1}.</b> ${protocolSafe(step)}${timerList[index] ? `<small class="readonly-step-timer"><i class="ti ti-clock"></i> ${protocolDurationLabel(timerList[index])}</small>` : ''}</div>
+            </label>`).join('')}
+    </div>`;
+};
+
+function setAuthUi(authenticated, user = null) {
+    AUTH_USER = user;
+    document.body.classList.remove('auth-pending', 'auth-login', 'auth-ready');
+    document.body.classList.add(authenticated ? 'auth-ready' : 'auth-login');
+    if (authenticated && typeof profSyncAuthUser === 'function') profSyncAuthUser(user);
+}
+
+async function authCheckSession() {
+    try {
+        let res = await fetch('/api/auth/session');
+        let data = await res.json();
+        setAuthUi(!!data.authenticated, data.user || null);
+        return !!data.authenticated;
+    } catch (e) {
+        setAuthUi(false, null);
+        return false;
+    }
+}
+
+window.authLogin = async function() {
+    let username = document.getElementById('loginUser')?.value.trim();
+    let password = document.getElementById('loginPwd')?.value || '';
+    if (!username || !password) {
+        showToast('需填写账号和密码', 'error');
+        return;
+    }
+    try {
+        let res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        let data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.detail || '登录失败');
+        setAuthUi(true, data.user);
+        showToast(`登录成功：${data.user.display_name || data.user.username}`);
+        await initAuthenticatedApp();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+};
+
+window.authLogout = async function() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setAuthUi(false, null);
+    showToast('已退出登录');
 };
 
 // ==========================================
@@ -42,9 +402,16 @@ function navigate(pageId) {
 }
 
 async function openModule(modId) {
-    document.getElementById('expHub').style.display = 'none';
+    let hub = document.getElementById('expHub');
+    if (hub) hub.style.display = 'none';
     document.querySelectorAll('.module-view').forEach(m => m.style.display = 'none');
-    document.getElementById(`mod-${modId}`).style.display = 'block';
+    let target = document.getElementById(`mod-${modId}`);
+    if (target) {
+        target.style.display = 'block';
+        target.classList.remove('view-enter', 'view-exit');
+        void target.offsetWidth;
+        target.classList.add('view-enter');
+    }
     
     if (modId === 'cell_passage') {
         loadCellDb();
@@ -61,20 +428,68 @@ async function openModule(modId) {
         if (typeof loadWbData === 'function') {
             await loadWbData();
         }
+    } else if (modId === 'if') {
+        if (typeof loadIfData === 'function') await loadIfData();
+    } else if (modId === 'animal') {
+        if (typeof loadAnimalData === 'function') await loadAnimalData();
+        if (typeof loadAnimalHarvestModule === 'function') await loadAnimalHarvestModule();
+    } else if (modId === 'samples') {
+        if (typeof loadSampleLibrary === 'function') await loadSampleLibrary();
+    } else if (modId === 'bioinfo') {
+        if (typeof loadBioinfoModule === 'function') await loadBioinfoModule();
+    } else if (modId === 'other') {
+        if (typeof loadOtherModule === 'function') await loadOtherModule();
+    } else if (modId === 'patient_harvest') {
+        if (typeof loadPatientHarvestModule === 'function') await loadPatientHarvestModule();
+    } else if (modId === 'sendout') {
+        if (typeof loadSendoutModule === 'function') await loadSendoutModule();
+    } else if (modId === 'primer_antibody') {
+        if (typeof loadPrimerAntibodyLibrary === 'function') await loadPrimerAntibodyLibrary();
+    } else if (modId === 'reagent') {
+        if (typeof loadReagentLibrary === 'function') await loadReagentLibrary();
     } else if (modId === 'protocols') {
         await Promise.all([
             loadProtocols(),
             loadMwLibrary(),
             loadCellDb(),
             typeof loadPcrData === 'function' ? loadPcrData() : Promise.resolve(),
-            typeof loadWbData === 'function' ? loadWbData() : Promise.resolve()
+            typeof loadWbData === 'function' ? loadWbData() : Promise.resolve(),
+            typeof loadWorkflowProtocols === 'function' ? loadWorkflowProtocols() : Promise.resolve()
         ]);
+        if (typeof renderProtocolLibraryHub === 'function') renderProtocolLibraryHub();
     }
 }
 
+function addDaysToDateTime(baseValue, days) {
+    let base = baseValue ? new Date(String(baseValue).replace(' ', 'T')) : new Date();
+    if (Number.isNaN(base.getTime())) base = new Date();
+    base.setDate(base.getDate() + (parseInt(days) || 0));
+    return base.toISOString().substring(0, 16).replace('T', ' ');
+}
+
 function closeModule() {
+    let active = Array.from(document.querySelectorAll('.module-view')).find(m => m.style.display !== 'none');
+    let hub = document.getElementById('expHub');
+    if (active) {
+        active.classList.remove('view-enter');
+        active.classList.add('view-exit');
+        setTimeout(() => {
+            active.style.display = 'none';
+            active.classList.remove('view-exit');
+            if (hub) {
+                hub.style.display = 'block';
+                hub.classList.remove('view-enter');
+                void hub.offsetWidth;
+                hub.classList.add('view-enter');
+            }
+        }, 160);
+        return;
+    }
     document.querySelectorAll('.module-view').forEach(m => m.style.display = 'none');
-    document.getElementById('expHub').style.display = 'block';
+    if (hub) {
+        hub.style.display = 'block';
+        hub.classList.add('view-enter');
+    }
 }
 
 function switchTab(btn, groupClass, targetId) {
@@ -118,7 +533,7 @@ function showToast(msg, type = "success") {
 // ==========================================
 // 初始化
 // ==========================================
-async function initApp() {
+async function initAuthenticatedApp() {
     try {
         let res = await fetch('/api/config');
         CONFIG = await res.json();
@@ -128,6 +543,12 @@ async function initApp() {
     
     // 初始化时加载首页数据
     loadHomeData();
+}
+
+async function initApp() {
+    let authenticated = await authCheckSession();
+    if (!authenticated) return;
+    await initAuthenticatedApp();
 }
 
 window.addEventListener('DOMContentLoaded', initApp);
@@ -247,7 +668,7 @@ async function loadDayDetails() {
         if (data.schedules.length === 0) {
             html += `<div class="empty-state" style="padding:24px 16px">
                 <i class="ti ti-calendar-off ti-xl"></i>
-                <div style="margin-top:8px;font-size:13px">当日暂无待办事项</div>
+                <div style="margin-top:8px;font-size:13px">当日无待办事项</div>
             </div>`;
         } else {
             data.schedules.forEach(s => {
@@ -260,13 +681,13 @@ async function loadDayDetails() {
                         <div style="font-weight:700">${time} · ${s.profile}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${s.details}</div>
                     </div>
-                    <button class="btn btn-sm btn-danger" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:2px 6px;" onclick="event.stopPropagation();schDeleteSchedule('${s.id}')"><i class="ti ti-trash"></i></button>
+                    <button class="btn btn-sm btn-danger" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);" onclick="event.stopPropagation();schDeleteSchedule('${s.id}')"><i class="ti ti-x"></i></button>
                 </div>`;
             });
         }
         
         html += `<div class="section-title"><i class="ti ti-flask"></i> 当日实验记录</div>`;
-        if (data.experiments.length === 0 && data.passages.length === 0) {
+        if (data.experiments.length === 0 && data.passages.length === 0 && (!data.workflows || data.workflows.length === 0)) {
             html += `<div class="empty-state" style="padding:24px 16px">
                 <i class="ti ti-file-off ti-xl"></i>
                 <div style="margin-top:8px;font-size:13px">当日无新实验记录</div>
@@ -295,6 +716,17 @@ async function loadDayDetails() {
             </div>`;
         });
 
+        (data.workflows || []).forEach(w => {
+            let icon = w.kind === 'harvest' ? 'ti-database-plus' : (w.primary_antibody ? 'ti-microscope' : 'ti-list-check');
+            html += `<div class="event-card experiment" onclick="navigate('journal');">
+                <div class="event-card-icon"><i class="ti ${icon}"></i></div>
+                <div class="event-card-body">
+                    <div style="font-weight:700">${w.name}</div>
+                    <div style="font-size:12px;opacity:0.8;margin-top:2px">${w.protocol_name || w.source_model_name || w.status || '工作流记录'}</div>
+                </div>
+            </div>`;
+        });
+
         let targetContainers = ['dayDetailContent', 'schDetailContent'];
         targetContainers.forEach(id => {
             let el = document.getElementById(id);
@@ -307,13 +739,10 @@ async function loadDayDetails() {
 }
 
 // ============================================
-// 手动新增日程安排 (Schedule)
+// 日程创建
 // ============================================
 
 window.schOpenCreateModal = function() {
-    let old = document.getElementById('schCreateModal');
-    if (old) old.remove();
-
     let year = STATE.selectedDate.getFullYear();
     let month = String(STATE.selectedDate.getMonth() + 1).padStart(2, '0');
     let day = String(STATE.selectedDate.getDate()).padStart(2, '0');
@@ -322,19 +751,10 @@ window.schOpenCreateModal = function() {
     let now = new Date();
     let hr = String((now.getHours() + 1) % 24).padStart(2, '0');
 
-    let modal = document.createElement('div');
-    modal.id = 'schCreateModal';
-    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99998;display:flex;align-items:flex-end;`;
-    modal.innerHTML = `
-        <div style="background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-height:85vh;overflow-y:auto;padding:24px 16px 32px;box-shadow:0 -10px 20px rgba(0,0,0,0.1);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div style="font-size:16px;font-weight:700"><i class="ti ti-calendar-plus" style="color:var(--accent);"></i> 新建待办日程</div>
-                <button onclick="document.getElementById('schCreateModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-secondary)">&times;</button>
-            </div>
-            
+    uiOpenSheet('schCreateModal', '<i class="ti ti-calendar-plus" style="color:var(--accent);"></i> 创建待办日程', `
             <div class="form-group">
                 <label class="form-label">待办项目名称</label>
-                <input type="text" class="form-input" id="schItemName" placeholder="例如：野生型小鼠肝脏取材">
+                <input type="text" class="form-input" id="schItemName" placeholder="野生型小鼠肝脏取材">
             </div>
             <div class="form-group">
                 <label class="form-label">时间</label>
@@ -352,16 +772,13 @@ window.schOpenCreateModal = function() {
             </div>
             <div class="form-group">
                 <label class="form-label">实验简要内容</label>
-                <textarea class="form-textarea" id="schItemNotes" rows="3" placeholder="具体方案或注意事项摘要…"></textarea>
+                <textarea class="form-textarea" id="schItemNotes" rows="3" placeholder="记录方案摘要或关键注意事项"></textarea>
             </div>
             
             <button class="btn btn-primary btn-block" style="margin-top:12px;font-size:14px;height:44px;" onclick="schSaveSchedule()">
                 <i class="ti ti-device-floppy"></i> 保存日程
             </button>
-        </div>
-    `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-    document.body.appendChild(modal);
+    `);
 }
 
 window.schSaveSchedule = async function() {
@@ -371,7 +788,7 @@ window.schSaveSchedule = async function() {
     let notes = document.getElementById('schItemNotes').value;
 
     if (!name || !time) {
-        showToast('项目名称和时间为必填项', 'error');
+        showToast('需填写项目名称和时间', 'error');
         return;
     }
 
@@ -391,7 +808,7 @@ window.schSaveSchedule = async function() {
         if (!res.ok) throw new Error('保存失败');
         
         showToast('新日程已创建同步！');
-        document.getElementById('schCreateModal').remove();
+        uiCloseSheet('schCreateModal');
         
         // 重新拉取日历数据并渲染
         loadHomeData(); 
@@ -421,6 +838,7 @@ async function loadCellDb() {
         STATE.cellDb = await res.json();
         renderCellProfiles();
         renderCellDbBox();
+        if (typeof renderProtocolLibraryHub === 'function') renderProtocolLibraryHub();
     } catch(e) {
         showToast("加载细胞档案失败", "error");
     }
@@ -454,27 +872,493 @@ function renderCellDbBox() {
             <div class="card-header"><i class="ti ti-dna-2"></i> 细胞档案库</div>
             <div class="form-group">
                 <label class="form-label">细胞名称</label>
-                <input class="form-input" id="cdbName" placeholder="如: VSMC">
+                <input class="form-input" id="cdbName" placeholder="VSMC">
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">基础培养基</label>
-                    <input class="form-input" id="cdbMedia" placeholder="如: DMEM">
+                    <input class="form-input" id="cdbMedia" placeholder="DMEM">
                 </div>
                 <div class="form-group">
                     <label class="form-label">FBS 浓度</label>
-                    <input class="form-input" id="cdbFbs" placeholder="如: 10%">
+                    <input class="form-input" id="cdbFbs" placeholder="10%">
                 </div>
             </div>
             <div class="form-group">
-                <label class="form-label">其他补充（可选）</label>
-                <input class="form-input" id="cdbOthers" placeholder="如: 青链霉素 1%">
+                <label class="form-label">其他补充</label>
+                <input class="form-input" id="cdbOthers" placeholder="青链霉素 1%">
             </div>
             <button class="btn btn-secondary btn-block" onclick="createCellProfileFromBox()"><i class="ti ti-device-floppy"></i> 保存细胞档案</button>
             <div class="divider"></div>
             ${existingItems}
         </div>
     `;
+}
+
+function protocolSafe(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function protocolJsArg(value) {
+    return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function protocolJsAttr(value) {
+    return protocolSafe(protocolJsArg(value));
+}
+
+function protocolDetectStepTimerSeconds(text) {
+    let match = String(text || '').match(/(\d+(?:\.\d+)?)\s*(小时|h|hr|hrs|hour|hours|分钟|min|mins|minute|minutes)(?![a-z])/i);
+    if (!match) return 0;
+    let value = parseFloat(match[1]);
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    let unit = match[2].toLowerCase();
+    return Math.round(value * (unit.includes('h') || unit.includes('小时') ? 3600 : 60));
+}
+
+function protocolTimerParts(seconds) {
+    seconds = labTimerSeconds(seconds);
+    let hours = Math.floor(seconds / 3600);
+    let minutes = Math.floor((seconds % 3600) / 60);
+    let secs = seconds % 60;
+    return { hours, minutes, seconds: secs };
+}
+
+function protocolTimerHms(seconds) {
+    let parts = protocolTimerParts(seconds);
+    return [parts.hours, parts.minutes, parts.seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
+
+function protocolTimerButtonHtml(seconds) {
+    seconds = labTimerSeconds(seconds);
+    let label = seconds ? protocolTimerHms(seconds) : '';
+    return `<button type="button" class="btn btn-sm btn-secondary protocol-step-icon protocol-step-timer-btn ${seconds ? 'has-timer' : ''}" data-step-timer-button onclick="protocolOpenStepTimer(this)" title="设置倒计时" aria-label="设置倒计时"><i class="ti ti-clock"></i><span data-step-timer-label>${label}</span></button>`;
+}
+
+function protocolTimerWheelOptions(max, selected) {
+    return Array.from({ length: max + 1 }, (_, value) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${String(value).padStart(2, '0')}</option>`).join('');
+}
+
+function protocolStepRow(value = '', index = 0, timerSeconds = 0) {
+    timerSeconds = labTimerSeconds(timerSeconds);
+    return `<div class="protocol-step-row">
+        <div class="protocol-step-number">${String(index + 1).padStart(2, '0')}</div>
+        <input type="text" class="form-input protocol-step-input" data-step-input value="${protocolSafe(value)}" placeholder="输入步骤内容">
+        <div class="protocol-step-actions">
+            <input type="hidden" data-step-timer-seconds value="${timerSeconds}">
+            ${protocolTimerButtonHtml(timerSeconds)}
+            <button type="button" class="btn btn-sm btn-danger protocol-step-icon" onclick="protocolRemoveStep(this)" title="删除步骤" aria-label="删除步骤"><i class="ti ti-trash"></i></button>
+        </div>
+    </div>`;
+}
+
+function protocolStepEditor(id, steps = [], timers = []) {
+    let values = Array.isArray(steps) && steps.length ? steps : [''];
+    let rows = values.map((step, index) => protocolStepRow(step, index, (timers || [])[index] || 0)).join('');
+    return `<div class="protocol-step-editor" data-step-editor="${protocolSafe(id)}">
+        <div class="protocol-step-editor-head">
+            <label class="form-label">流程步骤</label>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="protocolAddStep('${protocolJsArg(id)}')"><i class="ti ti-plus"></i> 添加步骤</button>
+        </div>
+        <div class="protocol-step-list">${rows}</div>
+    </div>`;
+}
+
+function protocolUpdateStepNumbers(editor) {
+    if (!editor) return;
+    editor.querySelectorAll('.protocol-step-row').forEach((row, index) => {
+        let num = row.querySelector('.protocol-step-number');
+        if (num) num.textContent = String(index + 1).padStart(2, '0');
+        let input = row.querySelector('[data-step-input]');
+        if (input) input.placeholder = `步骤 ${index + 1}`;
+    });
+}
+
+window.protocolAddStep = function(id, value = '') {
+    let editor = document.querySelector(`[data-step-editor="${id}"]`);
+    let list = editor ? editor.querySelector('.protocol-step-list') : null;
+    if (!editor || !list) return;
+    let count = list.querySelectorAll('.protocol-step-row').length;
+    list.insertAdjacentHTML('beforeend', protocolStepRow(value, count));
+    protocolUpdateStepNumbers(editor);
+    let inputs = list.querySelectorAll('[data-step-input]');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+};
+
+function protocolReadTimerWheelSeconds() {
+    let hour = parseInt(document.querySelector('[data-protocol-timer-part="hour"]')?.value || '0') || 0;
+    let minute = parseInt(document.querySelector('[data-protocol-timer-part="minute"]')?.value || '0') || 0;
+    let second = parseInt(document.querySelector('[data-protocol-timer-part="second"]')?.value || '0') || 0;
+    return Math.max(0, (hour * 3600) + (minute * 60) + second);
+}
+
+function protocolApplyStepTimer(row, seconds) {
+    if (!row) return;
+    seconds = labTimerSeconds(seconds);
+    let hidden = row.querySelector('[data-step-timer-seconds]');
+    let button = row.querySelector('[data-step-timer-button]');
+    let label = row.querySelector('[data-step-timer-label]');
+    if (hidden) hidden.value = String(seconds);
+    if (button) button.classList.toggle('has-timer', !!seconds);
+    if (button) button.title = seconds ? `倒计时 ${protocolTimerHms(seconds)}` : '设置倒计时';
+    if (label) label.textContent = seconds ? protocolTimerHms(seconds) : '';
+}
+
+window.protocolUpdateTimerWheelPreview = function() {
+    let preview = document.getElementById('protocolTimerWheelPreview');
+    if (preview) preview.textContent = protocolTimerHms(protocolReadTimerWheelSeconds());
+};
+
+window.protocolOpenStepTimer = function(button) {
+    let row = button.closest('.protocol-step-row');
+    if (!row) return;
+    window._protocolTimerTargetRow = row;
+    let savedSeconds = labTimerSeconds(row.querySelector('[data-step-timer-seconds]')?.value || 0);
+    let detectedSeconds = protocolDetectStepTimerSeconds(row.querySelector('[data-step-input]')?.value || '');
+    let initialSeconds = Math.min(savedSeconds || detectedSeconds, (99 * 3600) + (59 * 60) + 59);
+    let parts = protocolTimerParts(initialSeconds);
+    uiOpenSheet('protocolTimerWheelModal', '设置倒计时', `
+        <div class="protocol-timer-sheet">
+            <div class="protocol-timer-preview" id="protocolTimerWheelPreview">${protocolTimerHms(initialSeconds)}</div>
+            <div class="protocol-timer-wheel" role="group" aria-label="倒计时时长">
+                <label class="protocol-timer-wheel-column"><span>时</span><select size="5" data-protocol-timer-part="hour" onchange="protocolUpdateTimerWheelPreview()">${protocolTimerWheelOptions(99, Math.min(parts.hours, 99))}</select></label>
+                <label class="protocol-timer-wheel-column"><span>分</span><select size="5" data-protocol-timer-part="minute" onchange="protocolUpdateTimerWheelPreview()">${protocolTimerWheelOptions(59, parts.minutes)}</select></label>
+                <label class="protocol-timer-wheel-column"><span>秒</span><select size="5" data-protocol-timer-part="second" onchange="protocolUpdateTimerWheelPreview()">${protocolTimerWheelOptions(59, parts.seconds)}</select></label>
+            </div>
+            <div class="protocol-timer-actions">
+                <button type="button" class="btn btn-secondary" onclick="protocolClearStepTimer()"><i class="ti ti-clock-x"></i> 清除</button>
+                <button type="button" class="btn btn-primary" onclick="protocolSaveStepTimer()"><i class="ti ti-circle-check"></i> 保存</button>
+            </div>
+        </div>`);
+};
+
+window.protocolSaveStepTimer = function() {
+    protocolApplyStepTimer(window._protocolTimerTargetRow, protocolReadTimerWheelSeconds());
+    window._protocolTimerTargetRow = null;
+    uiCloseSheet('protocolTimerWheelModal');
+};
+
+window.protocolClearStepTimer = function() {
+    protocolApplyStepTimer(window._protocolTimerTargetRow, 0);
+    window._protocolTimerTargetRow = null;
+    uiCloseSheet('protocolTimerWheelModal');
+};
+
+window.protocolRemoveStep = function(button) {
+    let row = button.closest('.protocol-step-row');
+    let editor = button.closest('[data-step-editor]');
+    if (!row || !editor) return;
+    let rows = editor.querySelectorAll('.protocol-step-row');
+    if (rows.length <= 1) {
+        let input = row.querySelector('[data-step-input]');
+        if (input) input.value = '';
+        protocolApplyStepTimer(row, 0);
+        input?.focus();
+        return;
+    }
+    row.remove();
+    protocolUpdateStepNumbers(editor);
+};
+
+window.protocolReadSteps = function(id) {
+    let editor = document.querySelector(`[data-step-editor="${id}"]`);
+    if (!editor) return [];
+    return Array.from(editor.querySelectorAll('[data-step-input]')).map(input => input.value.trim()).filter(Boolean);
+};
+
+window.protocolReadStepTimers = function(id) {
+    let editor = document.querySelector(`[data-step-editor="${id}"]`);
+    if (!editor) return [];
+    return Array.from(editor.querySelectorAll('.protocol-step-row')).map(row => {
+        let step = row.querySelector('[data-step-input]')?.value.trim();
+        if (!step) return null;
+        return labTimerSeconds(row.querySelector('[data-step-timer-seconds]')?.value || 0);
+    }).filter(value => value !== null);
+};
+
+window.protocolSetSteps = function(id, steps = [], timers = []) {
+    let editor = document.querySelector(`[data-step-editor="${id}"]`);
+    let list = editor ? editor.querySelector('.protocol-step-list') : null;
+    if (!editor || !list) return false;
+    let values = Array.isArray(steps) && steps.length ? steps : [''];
+    list.innerHTML = values.map((step, index) => protocolStepRow(step, index, (timers || [])[index] || 0)).join('');
+    protocolUpdateStepNumbers(editor);
+    return true;
+};
+
+function protocolWorkflowModuleFromKey(key) {
+    return String(key || '').replace(/^wf_/, '');
+}
+
+function protocolLibrarySpecs() {
+    const pcr = typeof PCR_STATE !== 'undefined' ? PCR_STATE : {};
+    const wb = typeof WB_STATE !== 'undefined' ? WB_STATE : { protocols: {} };
+    const wf = typeof WORKFLOW_STATE !== 'undefined' ? WORKFLOW_STATE : { protocols: {} };
+    return {
+        cell: { label: '细胞档案库', icon: 'ti-dna-2', color: '#6f7f76', count: () => Object.keys(STATE.cellDb || {}).length, summary: '培养条件与生长参数', form: protocolCellForm, history: protocolCellHistory },
+        drug: { label: '细胞造模方案库', icon: 'ti-pill', color: '#9a7a62', count: () => (STATE.drugProtocols || []).length, summary: '培养体系与诱导组合', form: protocolDrugForm, history: protocolDrugHistory },
+        pcr_rna: { label: 'RNA 提取方案库', icon: 'ti-droplet', color: '#6f8a72', count: () => (pcr.rnaProtocols || []).length, summary: 'RNA 提取流程', form: protocolPcrRnaForm, history: protocolPcrRnaHistory },
+        pcr_rt: { label: '逆转录方案库', icon: 'ti-arrows-right-left', color: '#7e7791', count: () => (pcr.rtProtocols || []).length, summary: '逆转录体系与步骤', form: protocolPcrRtForm, history: protocolPcrRtHistory },
+        pcr_qpcr: { label: 'qPCR 体系方案库', icon: 'ti-chart-line', color: '#936b78', count: () => (pcr.qpcrProtocols || []).length, summary: '荧光定量反应体系', form: protocolPcrQpcrForm, history: protocolPcrQpcrHistory },
+        wb_extract: { label: 'WB 提取配平方案库', icon: 'ti-droplet-half-2', color: '#6c8391', count: () => ((wb.protocols || {}).extract || []).length, summary: '裂解、BCA 与配平参数', form: protocolWbExtractForm, history: protocolWbExtractHistory },
+        wb_electro: { label: 'WB 跑胶转膜方案库', icon: 'ti-layers-subtract', color: '#777c95', count: () => ((wb.protocols || {}).electrophoresis || []).length, summary: '电泳、制胶与转膜步骤', form: protocolWbElectroForm, history: protocolWbElectroHistory },
+        wb_detection: { label: 'WB 检测流程方案库', icon: 'ti-list-check', color: '#937079', count: () => ((wb.protocols || {}).detectionWorkflows || []).length, summary: '封闭、孵育、洗膜与显影', form: protocolWbDetectionForm, history: protocolWbDetectionHistory },
+        wb_marker: { label: 'WB Marker 方案库', icon: 'ti-ruler-2', color: '#708496', count: () => ((wb.protocols || {}).markerSchemes || []).length, summary: 'Marker 条带与分子量', form: protocolWbMarkerForm, history: protocolWbMarkerHistory },
+        wf_animal: { label: '动物造模方案库', icon: 'ti-vaccine', color: '#8f765f', count: () => ((wf.protocols || {}).animal || []).length, summary: '动物诱导与取材流程', form: () => protocolWorkflowForm('animal'), history: () => protocolWorkflowHistory('animal') },
+        wf_if: { label: '免疫荧光方案库', icon: 'ti-microscope', color: '#817993', count: () => ((wf.protocols || {}).if || []).length, summary: '固定、封闭与染色流程', form: () => protocolWorkflowForm('if'), history: () => protocolWorkflowHistory('if') },
+        wf_bioinfo: { label: '生信分析方案库', icon: 'ti-chart-dots-3', color: '#6d8494', count: () => ((wf.protocols || {}).bioinfo || []).length, summary: '数据处理与分析流程', form: () => protocolWorkflowForm('bioinfo'), history: () => protocolWorkflowHistory('bioinfo') },
+        wf_other: { label: '其他实验方案库', icon: 'ti-tool', color: '#75857c', count: () => ((wf.protocols || {}).other || []).length, summary: '通用实验流程', form: () => protocolWorkflowForm('other'), history: () => protocolWorkflowHistory('other') },
+        mw: { label: '常用试剂档案库', icon: 'ti-flask', color: '#817e93', count: () => (STATE.mwLibrary || []).length, summary: '摩尔质量档案', form: protocolMwForm, history: protocolMwHistory }
+    };
+}
+
+function protocolResetEditingFor(key) {
+    if (key === 'cell') {}
+    if (key === 'drug') { window._currentEditingDrugProtoId = null; _protoDrugs = []; }
+    if (key === 'pcr_rna') window._currentEditingRnaProtoId = null;
+    if (key === 'pcr_rt') window._currentEditingRtProtoId = null;
+    if (key === 'pcr_qpcr') window._currentEditingQpcrProtoId = null;
+    if (key === 'wb_extract') window._editingWbPExId = null;
+    if (key === 'wb_electro') window._editingWbPElId = null;
+    if (key === 'wb_detection') window._editingWbDWorkflowId = null;
+    if (key === 'wb_marker') { window._editingWbMarkerId = null; window._wbMarkerBandDraft = []; }
+    if (String(key).startsWith('wf_')) { window._editingWorkflowProtocolId = null; window._editingWorkflowModule = null; }
+}
+
+window.protocolOpenLibrary = function(key) {
+    window._protocolLibraryActive = key;
+    window._protocolLibraryCreating = false;
+    window._protocolLibraryMotion = 'enter';
+    renderProtocolLibraryHub();
+};
+
+window.protocolStartCreate = function(key) {
+    if (key) window._protocolLibraryActive = key;
+    protocolResetEditingFor(window._protocolLibraryActive);
+    window._protocolLibraryCreating = true;
+    window._protocolLibraryMotion = '';
+    renderProtocolLibraryHub();
+};
+
+window.protocolCancelForm = function() {
+    protocolCloseCreateForm(() => {
+        protocolResetEditingFor(window._protocolLibraryActive);
+        window._protocolLibraryCreating = false;
+        renderProtocolLibraryHub();
+    });
+};
+
+window.protocolBackToHub = function() {
+    window._protocolLibraryActive = '';
+    window._protocolLibraryCreating = false;
+    window._protocolLibraryMotion = 'back';
+    renderProtocolLibraryHub();
+};
+
+window.protocolFinishSave = function() {
+    return protocolCloseCreateForm(() => {
+        window._protocolLibraryCreating = false;
+        renderProtocolLibraryHub();
+    });
+};
+
+function protocolCloseCreateForm(afterClose) {
+    let panel = document.querySelector('#protocolLibraryView .protocol-form-panel');
+    if (!panel) {
+        afterClose();
+        return Promise.resolve();
+    }
+    panel.style.setProperty('--protocol-close-height', `${panel.scrollHeight}px`);
+    panel.classList.remove('form-drop-enter');
+    panel.classList.add('form-drop-exit');
+    return new Promise(resolve => setTimeout(() => {
+        afterClose();
+        resolve();
+    }, 130));
+}
+
+function protocolEntry(key, spec) {
+    return `<button class="protocol-library-entry" onclick="protocolOpenLibrary('${key}')">
+        <span class="protocol-library-icon" style="color:${spec.color};border-color:${spec.color}33;background:${spec.color}12"><i class="ti ${spec.icon}"></i></span>
+        <span class="protocol-library-main"><b>${spec.label}</b><small>${spec.summary}</small></span>
+        <span class="protocol-library-count">${spec.count()} 条</span>
+        <i class="ti ti-chevron-right protocol-library-chevron"></i>
+    </button>`;
+}
+
+window.renderProtocolLibraryHub = function() {
+    let container = document.getElementById('protocolLibraryView');
+    if (!container) return;
+    let specs = protocolLibrarySpecs();
+    let active = window._protocolLibraryActive || '';
+    if (!active || !specs[active]) {
+        window._protocolLibraryActive = '';
+        let keys = Object.keys(specs);
+        let motion = window._protocolLibraryMotion === 'back' ? ' protocol-view-back' : '';
+        container.innerHTML = `<div class="protocol-library-list${motion}">${keys.map(key => protocolEntry(key, specs[key])).join('')}</div>`;
+        window._protocolLibraryMotion = '';
+        return;
+    }
+    let spec = specs[active];
+    let motion = window._protocolLibraryMotion === 'enter' ? ' protocol-view-enter' : '';
+    let formHtml = window._protocolLibraryCreating ? `<div class="protocol-form-panel form-drop-enter">${spec.form()}</div>` : '';
+    container.innerHTML = `<div class="protocol-subpage${motion}">
+        <button class="protocol-subpage-back" onclick="protocolBackToHub()"><i class="ti ti-chevron-left"></i> 方案库</button>
+        <div class="protocol-subpage-head">
+            <div class="protocol-subpage-title"><span style="color:${spec.color};border-color:${spec.color}33;background:${spec.color}12"><i class="ti ${spec.icon}"></i></span><div><b>${spec.label}</b><small>${spec.summary}</small></div></div>
+            ${window._protocolLibraryCreating ? '' : `<button class="btn btn-primary" onclick="protocolStartCreate('${active}')"><i class="ti ti-plus"></i> 新建方案</button>`}
+        </div>
+        ${formHtml}
+        <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
+        <div class="protocol-history-list">${spec.history()}</div>
+    </div>`;
+    window._protocolLibraryMotion = '';
+    if (active === 'drug' && window._protocolLibraryCreating) _renderProtoDrugRows();
+};
+
+function protocolListItem(title, subtitle, actions = '') {
+    return `<div class="list-item protocol-history-item"><div class="list-item-content"><div class="list-item-title">${title}</div>${subtitle ? `<div class="list-item-subtitle">${subtitle}</div>` : ''}</div><div class="list-item-actions">${actions}</div></div>`;
+}
+
+window.protocolFormShell = function(title, icon, bodyHtml, primaryActionHtml) {
+    return `<div class="card inline-form-panel protocol-form-card">
+        <div class="inline-form-head"><b><i class="ti ${icon || 'ti-plus'}"></i> ${title}</b><button class="btn btn-sm btn-secondary" onclick="protocolCancelForm()" title="关闭"><i class="ti ti-x"></i></button></div>
+        ${bodyHtml}
+        ${primaryActionHtml ? `<div class="protocol-form-actions">${primaryActionHtml}</div>` : ''}
+    </div>`;
+};
+
+function protocolCellForm() {
+    return protocolFormShell('新建细胞档案', 'ti-plus', `
+        <div class="form-group"><label class="form-label">细胞名称</label><input class="form-input" id="cdbName" placeholder="VSMC"></div>
+        <div class="form-row"><div class="form-group"><label class="form-label">基础培养基</label><input class="form-input" id="cdbMedia" placeholder="DMEM"></div><div class="form-group"><label class="form-label">FBS 浓度</label><input class="form-input" id="cdbFbs" placeholder="10%"></div></div>
+        <div class="form-group"><label class="form-label">其他补充</label><input class="form-input" id="cdbOthers" placeholder="青链霉素 1%"></div>
+    `, `<button class="btn btn-primary" onclick="createCellProfileFromBox()"><i class="ti ti-device-floppy"></i> 保存细胞档案</button>`);
+}
+
+function protocolCellHistory() {
+    let keys = Object.keys(STATE.cellDb || {});
+    if (!keys.length) return '<div class="empty-state">暂无细胞档案</div>';
+    return keys.map(k => {
+        let p = (STATE.cellDb[k] && STATE.cellDb[k].params) || {};
+        let sub = `${p.base_media || '-'} + FBS ${p.fbs || '-'}${p.others ? ' · ' + p.others : ''}`;
+        return protocolListItem(protocolSafe(k), protocolSafe(sub), `<button class="btn btn-sm btn-danger" onclick="deleteCellProfile('${protocolJsArg(k)}')"><i class="ti ti-x"></i></button>`);
+    }).join('');
+}
+
+function protocolDrugForm() {
+    return protocolFormShell('新建造模方案', 'ti-plus', `
+        <div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="pName" placeholder="TGF-beta 造模"></div>
+        <div class="form-row"><div class="form-group"><label class="form-label">基础培养基</label><input class="form-input" id="pBaseMedia" placeholder="DMEM" value="DMEM"></div><div class="form-group"><label class="form-label">FBS 浓度</label><input class="form-input" id="pFbsConc" placeholder="10%" value="10%"></div></div>
+        <div class="section-subtitle" style="font-weight:700;margin-bottom:6px;">额外加药</div><div id="protoDrugRows"><div style="font-size:12px;color:#999;padding:4px 0;">（无额外加药）</div></div>
+        <button class="btn btn-sm btn-secondary" style="margin-bottom:10px" onclick="_addProtoDrug()"><i class="ti ti-plus"></i> 添加药物</button>
+        <div class="form-group"><label class="form-label">备注</label><input class="form-input" id="pNote"></div>
+    `, `<button class="btn btn-primary" onclick="addProtocol()"><i class="ti ti-device-floppy"></i> 保存造模方案</button>`);
+}
+
+function protocolDrugHistory() {
+    let list = STATE.drugProtocols || [];
+    if (!list.length) return '<div class="empty-state">暂无方案</div>';
+    return list.map(p => {
+        let drugsInfo = (p.drugs && p.drugs.length) ? p.drugs.map(d => `${d.drug_name} ${d.work_conc}${d.work_unit}`).join(' + ') : '无额外加药';
+        return protocolListItem(protocolSafe(p.name), `${protocolSafe(p.base_media || 'DMEM')} + FBS ${protocolSafe(p.fbs_conc || '10%')} · ${protocolSafe(drugsInfo)}`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('drug');editProtocol('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteProtocol('${p.id}')"><i class="ti ti-x"></i></button>`);
+    }).join('');
+}
+
+function protocolPcrRnaForm() {
+    return protocolFormShell('新建 RNA 提取方案', 'ti-plus', `<div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="rnaPName" placeholder="Trizol"></div>${protocolStepEditor('rnaPSteps')}`, `<button class="btn btn-primary" onclick="saveRnaProtocol()"><i class="ti ti-device-floppy"></i> 保存 RNA 方案</button>`);
+}
+
+function protocolPcrRnaHistory() {
+    let list = (typeof PCR_STATE !== 'undefined' ? PCR_STATE.rnaProtocols : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 RNA 提取方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${(p.steps || []).length} 个流程步骤`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('pcr_rna');editRnaP('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deletePcrItem('rna','protocols','${p.id}', event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolPcrRtForm() {
+    return protocolFormShell('新建逆转录方案', 'ti-plus', `<div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="rtPName" placeholder="诺唯赞 RT Kit"></div>${protocolStepEditor('rtPSteps')}<div class="form-row"><div class="form-group"><label class="form-label">总量(μL)</label><input type="number" id="rtPTotal" class="form-input" value="20"></div><div class="form-group"><label class="form-label">酶用量(μL)</label><input type="number" id="rtPEnz" class="form-input" value="4"></div><div class="form-group"><label class="form-label">总RNA(ng)</label><input type="number" id="rtPRna" class="form-input" value="1000"></div></div>`, `<button class="btn btn-primary" onclick="saveRtProtocol()"><i class="ti ti-device-floppy"></i> 保存 RT 方案</button>`);
+}
+
+function protocolPcrRtHistory() {
+    let list = (typeof PCR_STATE !== 'undefined' ? PCR_STATE.rtProtocols : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无逆转录方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${p.total_vol || 20}μL · 酶 ${p.enzyme_vol || 4}μL · ${(p.steps || []).length} 步`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('pcr_rt');editRtP('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deletePcrItem('rt','protocols','${p.id}', event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolPcrQpcrForm() {
+    return protocolFormShell('新建 qPCR 体系', 'ti-plus', `<div class="form-group"><label class="form-label">体系名称</label><input class="form-input" id="qPName" placeholder="10ul SYBR"></div>${protocolStepEditor('qPSteps')}<div class="form-row"><div class="form-group"><label class="form-label">单孔总量(μL)</label><input type="number" id="qPTotal" value="10" class="form-input"></div><div class="form-group"><label class="form-label">SYBR/Mix(μL)</label><input type="number" id="qPSybr" value="5" class="form-input"></div></div><div class="form-row"><div class="form-group"><label class="form-label">引物(μL)</label><input type="number" id="qPPrimer" value="1" class="form-input"></div><div class="form-group"><label class="form-label">cDNA(μL)</label><input type="number" id="qPCdna" value="1" class="form-input"></div></div>`, `<button class="btn btn-primary" onclick="saveQpcrProtocol()"><i class="ti ti-device-floppy"></i> 保存 qPCR 体系</button>`);
+}
+
+function protocolPcrQpcrHistory() {
+    let list = (typeof PCR_STATE !== 'undefined' ? PCR_STATE.qpcrProtocols : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 qPCR 体系方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${p.well_vol || '-'}μL体系 · 水:${(p.well_vol || 0) - (p.sybr_vol || 0) - (p.primer_vol || 0) - (p.cdna_vol || 0)}μL · ${(p.steps || []).length} 步`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('pcr_qpcr');editQpcrP('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deletePcrItem('qpcr','protocols','${p.id}',event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolWbExtractForm() {
+    return protocolFormShell('新建 WB 提取配平方案', 'ti-plus', `<div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="wbPExName" placeholder="RIPA + 5x Loading"></div>${protocolStepEditor('wbPExSteps')}<div class="form-group"><label class="form-label">Loading Buffer设定</label><select class="form-select" id="wbPExLb"><option value="4">4x</option><option value="5" selected>5x</option><option value="6">6x</option></select></div>`, `<button class="btn btn-primary" onclick="saveWbPEx()"><i class="ti ti-device-floppy"></i> 保存方案</button>`);
+}
+
+function protocolWbExtractHistory() {
+    let list = (typeof WB_STATE !== 'undefined' ? WB_STATE.protocols.extract : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 WB 提取配平方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `Loading Buffer ${p.lb_factor || 5}x · ${(p.steps || []).length} 步`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('wb_extract');editWbPEx('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteWbItem('extract','protocols','${p.id}',event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolWbElectroForm() {
+    return protocolFormShell('新建跑胶转膜方案', 'ti-plus', `<div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="wbPElName" placeholder="10% 预制胶 + 湿转"></div>${protocolStepEditor('wbPElSteps')}`, `<button class="btn btn-primary" onclick="saveWbPEl()"><i class="ti ti-device-floppy"></i> 保存方案</button>`);
+}
+
+function protocolWbElectroHistory() {
+    let list = (typeof WB_STATE !== 'undefined' ? WB_STATE.protocols.electrophoresis : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 WB 跑胶转膜方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${(p.steps || []).length} 个流程步骤`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('wb_electro');editWbPEl('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteWbItem('electrophoresis','protocols','${p.id}',event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolWbDetectionForm() {
+    return protocolFormShell('新建 WB 检测流程', 'ti-plus', `<div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="wbDWfName" placeholder="常规 ECL 洗膜流程"></div>${protocolStepEditor('wbDWfSteps')}`, `<button class="btn btn-primary" onclick="saveWbDWorkflow()"><i class="ti ti-device-floppy"></i> 保存流程</button>`);
+}
+
+function protocolWbDetectionHistory() {
+    let list = (typeof WB_STATE !== 'undefined' ? WB_STATE.protocols.detectionWorkflows : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 WB 检测流程方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${(p.steps || []).length} 个流程步骤`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('wb_detection');editWbDWorkflow('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteWbItem('detection','protocols','${p.id}',event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolWbMarkerForm() {
+    return typeof wbMarkerSchemeForm === 'function' ? wbMarkerSchemeForm() : '<div class="empty-state">Marker 编辑器未加载</div>';
+}
+
+function protocolWbMarkerHistory() {
+    let list = (typeof WB_STATE !== 'undefined' ? WB_STATE.protocols.markerSchemes : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无 Marker 方案</div>';
+    return list.map(p => protocolListItem(protocolSafe(p.name), (p.bands || []).map(b => `${b.mw}kDa`).join(' / ') || '未设置条带', `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('wb_marker');editWbMarkerScheme('${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteWbItem('detection','protocols','${p.id}',event)"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolWorkflowForm(module) {
+    let meta = (typeof WORKFLOW_META !== 'undefined' ? WORKFLOW_META[module] : null) || { label: module };
+    return protocolFormShell(`新建${meta.label}方案`, 'ti-plus', `<div class="form-row"><div class="form-group"><label class="form-label">模块类型</label><select class="form-select" id="wfProtoModule"><option value="${module}">${meta.label}</option></select></div><div class="form-group"><label class="form-label">方案名称</label><input class="form-input" id="wfProtoName" placeholder="${meta.label}流程"></div></div>${protocolStepEditor('wfProtoSteps')}<div class="form-group"><label class="form-label">备注</label><input class="form-input" id="wfProtoNote"></div>`, `<button class="btn btn-primary" onclick="saveWorkflowProtocol()"><i class="ti ti-device-floppy"></i> 保存方案</button>`);
+}
+
+function protocolWorkflowHistory(module) {
+    let list = (typeof WORKFLOW_STATE !== 'undefined' ? WORKFLOW_STATE.protocols[module] : []) || [];
+    if (!list.length) return '<div class="empty-state">暂无方案</div>';
+    let key = `wf_${module}`;
+    return list.map(p => protocolListItem(protocolSafe(p.name), `${(p.steps || []).length} 个步骤${p.note ? ' · ' + protocolSafe(p.note) : ''}`, `<button class="btn btn-sm btn-secondary" onclick="protocolStartCreate('${key}');editWorkflowProtocol('${module}','${p.id}')"><i class="ti ti-pencil"></i></button><button class="btn btn-sm btn-danger" onclick="deleteWorkflowProtocol('${module}','${p.id}')"><i class="ti ti-x"></i></button>`)).join('');
+}
+
+function protocolMwForm() {
+    return protocolFormShell('新建常用试剂档案', 'ti-plus', `<div class="form-row"><div class="form-group" style="flex:2;"><label class="form-label">化学试剂名称</label><input class="form-input" id="mwNameIn" placeholder="NaCl, DMSO"></div><div class="form-group"><label class="form-label">摩尔质量(g/mol)</label><input type="number" class="form-input" id="mwValueIn" placeholder="数值"></div></div>`, `<button class="btn btn-primary" onclick="addMw()"><i class="ti ti-device-floppy"></i> 保存试剂档案</button>`);
+}
+
+function protocolMwHistory() {
+    let list = STATE.mwLibrary || [];
+    if (!list.length) return '<div class="empty-state">暂无登记试剂</div>';
+    return list.map(m => protocolListItem(protocolSafe(m.name), `摩尔质量: ${protocolSafe(m.mw)} g/mol`, `<button class="btn btn-sm btn-danger" onclick="deleteMw('${m.id}')"><i class="ti ti-x"></i></button>`)).join('');
 }
 
 async function createCellProfileFromBox() {
@@ -484,7 +1368,7 @@ async function createCellProfileFromBox() {
     let others = document.getElementById('cdbOthers').value.trim();
 
     if (!name || !media || !fbs) {
-        showToast("名称/培养基/血清必填", "error");
+        showToast("需填写名称、培养基和血清", "error");
         return;
     }
     try {
@@ -497,6 +1381,7 @@ async function createCellProfileFromBox() {
             let err = await res.json();
             throw new Error(err.error || err.detail || "创建失败");
         }
+        if (typeof protocolFinishSave === 'function') await protocolFinishSave();
         showToast("创建成功");
         await loadCellDb(); // 同时刷新传代模块下拉和方案库卡片
     } catch(e) {
@@ -546,7 +1431,7 @@ function renderCpCalc() {
     let container = document.getElementById('cpCalc');
     if (!container) return;
     if(!STATE.activeCellProfile) {
-        container.innerHTML = '<div class="empty-state">请先选择细胞档案</div>';
+        container.innerHTML = '<div class="empty-state">需选择细胞档案</div>';
         return;
     }
     
@@ -660,7 +1545,7 @@ async function doPassageCalc() {
         let srcCount = payload.src_count;
         let tgtCount = payload.tgt_count;
         
-        // 如果比例 > 100%，源容器不够，提示警告
+        // 比例超过 100% 时标记容量不足
         let ratioWarning = data.passage_ratio > 1.0
             ? `<div style="color:var(--danger);font-size:12px;margin-top:4px"><i class="ti ti-alert-triangle"></i> 传代比例异常：源容器细胞总数不足以满足期望接种量。</div>` : '';
         
@@ -688,7 +1573,7 @@ async function doPassageCalc() {
                 </div>
                 
                 <div class="form-group">
-                    <input type="text" class="form-input" id="calcNote" placeholder="传代备注 (如: 第15代)">
+                    <input type="text" class="form-input" id="calcNote" placeholder="传代备注：第15代">
                 </div>
                 <button class="btn btn-secondary btn-block" onclick="confirmPassage()"><i class="ti ti-circle-check"></i> 确认并记录</button>
             </div>
@@ -726,7 +1611,7 @@ function renderCpCalibrate() {
     let container = document.getElementById('cpCalibrate');
     if (!container) return;
     if(!STATE.activeCellProfile) {
-        container.innerHTML = '<div class="empty-state">请先选择细胞档案</div>';
+        container.innerHTML = '<div class="empty-state">需选择细胞档案</div>';
         return;
     }
 
@@ -927,7 +1812,7 @@ window.editPassage = async function(id) {
     let calcCard = document.querySelector('.card-header i.ti-cell')?.closest('.card');
     if (calcCard) calcCard.scrollIntoView({behavior: 'smooth'});
     
-    showToast(`已加载修改项，修改后点击计算以生成新记录`);
+    showToast(`记录已载入，可重新计算并保存`);
 }
 
 
@@ -948,6 +1833,7 @@ async function loadProtocols() {
         let res = await fetch('/api/protocols');
         STATE.drugProtocols = await res.json();
         renderProtocols();
+        if (typeof renderProtocolLibraryHub === 'function') renderProtocolLibraryHub();
         renderDilution();
         // 如果当时已经在设计页面，则更新网格
         renderDrugDesign();
@@ -1030,23 +1916,23 @@ function renderProtocols() {
             <div class="card-header"><i class="ti ti-pill"></i> 细胞造模方案库</div>
             <div class="form-group">
                 <label class="form-label">方案名称</label>
-                <input class="form-input" id="pName" placeholder="如: TGF-β 造模">
+                <input class="form-input" id="pName" placeholder="TGF-β 造模">
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">基础培养基</label>
-                    <input class="form-input" id="pBaseMedia" placeholder="如: DMEM" value="DMEM">
+                    <input class="form-input" id="pBaseMedia" placeholder="DMEM" value="DMEM">
                 </div>
                 <div class="form-group">
                     <label class="form-label">FBS 浓度</label>
-                    <input class="form-input" id="pFbsConc" placeholder="如: 10%" value="10%">
+                    <input class="form-input" id="pFbsConc" placeholder="10%" value="10%">
                 </div>
             </div>
-            <div style="font-size:12px;font-weight:600;margin:8px 0 4px;color:var(--text-secondary)">额外加药（可选）</div>
+            <div style="font-size:12px;font-weight:600;margin:8px 0 4px;color:var(--text-secondary)">额外加药</div>
             <div id="protoDrugRows"><div style="font-size:12px;color:#999;padding:4px 0;">（无额外加药）</div></div>
             <button class="btn btn-sm btn-secondary" style="margin-bottom:10px" onclick="_addProtoDrug()"><i class="ti ti-plus"></i> 添加药物</button>
             <div class="form-group">
-                <label class="form-label">备注（可选）</label>
+                <label class="form-label">备注</label>
                 <input class="form-input" id="pNote" placeholder="">
             </div>
             <div style="display:flex;gap:8px;">
@@ -1066,7 +1952,7 @@ async function addProtocol() {
     let note = document.getElementById('pNote').value.trim();
 
     if (!name) {
-        showToast("方案名称必填", "error");
+        showToast("需填写方案名称", "error");
         return;
     }
     // 过滤掉药名为空的行
@@ -1089,6 +1975,7 @@ async function addProtocol() {
             showToast("保存成功");
             window._currentEditingDrugProtoId = null;
             _protoDrugs = [];
+            if (typeof protocolFinishSave === 'function') await protocolFinishSave();
             loadProtocols();
         } else {
             let err = await res.json();
@@ -1138,6 +2025,7 @@ async function loadMwLibrary() {
         let res = await fetch('/api/mw-library');
         STATE.mwLibrary = await res.json();
         renderMwLibrary();
+        if (typeof renderProtocolLibraryHub === 'function') renderProtocolLibraryHub();
         // If dilution calc is currently open, we should re-render it to update the MW dropdown
         if (document.getElementById('dtDilution') && document.getElementById('dtDilution').innerHTML !== '') {
             renderDilution();
@@ -1167,7 +2055,7 @@ function renderMwLibrary() {
             <div class="form-row">
                 <div class="form-group" style="flex:2;">
                     <label class="form-label">化学试剂名称</label>
-                    <input class="form-input" id="mwNameIn" placeholder="例如: NaCl, DMSO">
+                    <input class="form-input" id="mwNameIn" placeholder="NaCl, DMSO">
                 </div>
                 <div class="form-group" style="flex:1;">
                     <label class="form-label">摩尔质量(g/mol)</label>
@@ -1187,7 +2075,7 @@ async function addMw() {
     let name = document.getElementById('mwNameIn').value.trim();
     let mw = parseFloat(document.getElementById('mwValueIn').value);
     if (!name || isNaN(mw) || mw <= 0) {
-        showToast("请输入有效的试剂名称和数值", "error");
+        showToast("需填写有效的试剂名称和数值", "error");
         return;
     }
     try {
@@ -1198,6 +2086,7 @@ async function addMw() {
         });
         if (res.ok) {
             showToast("档案已更新");
+            if (typeof protocolFinishSave === 'function') await protocolFinishSave();
             loadMwLibrary();
         } else {
             showToast("添加失败", "error");
@@ -1214,10 +2103,75 @@ async function deleteMw(id) {
     } catch(e) {}
 }
 
+window.ccUseMwPreset = function(selectEl, mwInputId, nameInputId) {
+    let selected = selectEl.options[selectEl.selectedIndex];
+    let selectedName = (selected?.textContent || '').replace(/\s*\([^)]*\)\s*$/, '');
+    let mwInput = document.getElementById(mwInputId);
+    let nameInput = document.getElementById(nameInputId);
+    if (mwInput) mwInput.value = selectEl.value || '';
+    if (nameInput && selectEl.value && selectedName) nameInput.value = selectedName;
+};
+
+function ccRound(value, digits = 4) {
+    if (!Number.isFinite(value)) return '-';
+    return parseFloat(value.toFixed(digits)).toString();
+}
+
+function ccFormatMass(massMg) {
+    if (!Number.isFinite(massMg) || massMg < 0) return '-';
+    if (massMg >= 1000) return `${ccRound(massMg / 1000, 4)} g`;
+    if (massMg >= 1) return `${ccRound(massMg, 4)} mg`;
+    if (massMg >= 0.001) return `${ccRound(massMg * 1000, 3)} μg`;
+    return `${ccRound(massMg * 1000000, 3)} ng`;
+}
+
+function ccFormatMoles(moles) {
+    if (moles >= 1e-3) return `${ccRound(moles, 6)} mol`;
+    if (moles >= 1e-6) return `${ccRound(moles * 1000, 4)} mmol`;
+    if (moles >= 1e-9) return `${ccRound(moles * 1000000, 4)} μmol`;
+    return `${ccRound(moles * 1000000000, 4)} nmol`;
+}
+
+function ccFormatActivity(iuValue) {
+    if (iuValue >= 1000000) return `${ccRound(iuValue / 1000000, 4)} MIU`;
+    if (iuValue >= 1000) return `${ccRound(iuValue / 1000, 4)} kIU`;
+    return `${ccRound(iuValue, 4)} IU`;
+}
+
+function ccVolumeToMl(volumeValue, unit) {
+    if (unit === 'μL') return volumeValue / 1000;
+    if (unit === 'L') return volumeValue * 1000;
+    return volumeValue;
+}
+
+function ccCalculatePowderMass(concentration, unit, volumeMl, molecularWeight, potencyIuPerMg) {
+    const molarUnits = { 'nM': 1e-9, 'μM': 1e-6, 'uM': 1e-6, 'mM': 1e-3, 'M': 1 };
+    const massUnits = { 'ng/mL': 1e-6, 'μg/mL': 1e-3, 'ug/mL': 1e-3, 'mg/mL': 1, 'g/L': 1, 'mg/L': 1e-3 };
+    const activityUnits = { 'IU/mL': 1, 'U/mL': 1, 'IU/L': 1e-3, 'U/L': 1e-3 };
+
+    if (molarUnits[unit]) {
+        if (!molecularWeight || molecularWeight <= 0) throw new Error('摩尔浓度计算需填写摩尔质量 MW');
+        let moles = concentration * molarUnits[unit] * (volumeMl / 1000);
+        return { massMg: moles * molecularWeight * 1000, amountText: ccFormatMoles(moles), basis: '摩尔浓度' };
+    }
+    if (massUnits[unit]) {
+        let massMg = concentration * massUnits[unit] * volumeMl;
+        return { massMg, amountText: ccFormatMass(massMg), basis: '质量浓度' };
+    }
+    if (activityUnits[unit]) {
+        if (!potencyIuPerMg || potencyIuPerMg <= 0) throw new Error('有效单位浓度计算需填写效价 IU/mg');
+        let totalIu = concentration * activityUnits[unit] * volumeMl;
+        return { massMg: totalIu / potencyIuPerMg, amountText: ccFormatActivity(totalIu), basis: '有效单位浓度' };
+    }
+    throw new Error('暂不支持该工作液浓度单位');
+}
+
 function renderDilution() {
     let container = document.getElementById('dtDilution');
     if (!container) return;
     let opts = CONFIG.concentration_units.map(u=>`<option value="${u}">${u}</option>`).join('');
+    let powderUnits = ['nM', 'μM', 'mM', 'M', 'ng/mL', 'μg/mL', 'mg/mL', 'g/L', 'IU/mL', 'U/mL', 'IU/L', 'U/L'];
+    let powderOpts = powderUnits.map(u=>`<option value="${u}" ${u === 'μM' ? 'selected' : ''}>${u}</option>`).join('');
     
     // Build MW Library Options
     if (!STATE.mwLibrary) STATE.mwLibrary = [];
@@ -1254,7 +2208,7 @@ function renderDilution() {
             </div>
             
             <div style="padding:12px;background:var(--surface-hover);border-radius:12px;margin-bottom:12px;">
-                <div style="font-size:12px;font-weight:600;color:var(--warning);margin-bottom:8px;"><i class="ti ti-bulb"></i> 若单位发生质量和摩尔互转（如 mg 到 μM），需提供摩尔质量：</div>
+                <div style="font-size:12px;font-weight:600;color:var(--warning);margin-bottom:8px;"><i class="ti ti-info-circle"></i> 质量单位与摩尔单位互转需提供摩尔质量：</div>
                 <div class="form-row">
                     <div class="form-group" style="flex:2;margin:0">
                         <label class="form-label">调用档案库常用试剂</label>
@@ -1264,7 +2218,7 @@ function renderDilution() {
                     </div>
                     <div class="form-group" style="flex:1;margin:0">
                         <label class="form-label">试剂名(选填)</label>
-                        <input type="text" class="form-input" id="ccName" placeholder="如 NaCl">
+                        <input type="text" class="form-input" id="ccName" placeholder="NaCl">
                     </div>
                     <div class="form-group" style="flex:1;margin:0">
                         <label class="form-label">摩尔质量(MW)</label>
@@ -1275,6 +2229,56 @@ function renderDilution() {
             
             <button class="btn btn-primary btn-block" onclick="doDilution()"><i class="ti ti-calculator"></i> 计算制备体积</button>
             <div id="dilutionRes" style="margin-top:16px"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><i class="ti ti-scale"></i> 粉末配制工作液</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">工作液浓度</label>
+                    <input type="number" class="form-input" id="ccPowderConc" value="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">浓度单位</label>
+                    <select class="form-select" id="ccPowderUnit">${powderOpts}</select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">工作液总体积</label>
+                    <input type="number" class="form-input" id="ccPowderVol" value="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">体积单位</label>
+                    <select class="form-select" id="ccPowderVolUnit"><option value="mL">mL</option><option value="L">L</option><option value="μL">μL</option></select>
+                </div>
+            </div>
+            <div style="padding:12px;background:var(--surface-hover);border-radius:12px;margin-bottom:12px;">
+                <div class="form-row">
+                    <div class="form-group" style="flex:2;margin:0">
+                        <label class="form-label">调用档案库常用试剂</label>
+                        <select class="form-select" onchange="ccUseMwPreset(this, 'ccPowderMw', 'ccPowderName')">
+                            ${mwOpts}
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;margin:0">
+                        <label class="form-label">试剂名</label>
+                        <input type="text" class="form-input" id="ccPowderName" placeholder="药物/蛋白名称">
+                    </div>
+                </div>
+                <div class="form-row" style="margin-top:10px">
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">摩尔质量 MW (g/mol)</label>
+                        <input type="number" class="form-input" id="ccPowderMw" placeholder="摩尔浓度时填写">
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label class="form-label">效价 (IU/mg)</label>
+                        <input type="number" class="form-input" id="ccPowderIu" placeholder="IU 或 U 单位时填写">
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="doPowderPreparation()"><i class="ti ti-scale"></i> 计算称量质量</button>
+            <div id="powderRes" style="margin-top:16px"></div>
         </div>
         <div class="section-title"><i class="ti ti-history"></i> 计算历史</div>
         <div id="dilutionHistoryBox"></div>
@@ -1297,7 +2301,8 @@ window.loadDilutionHistory = async function() {
         container.innerHTML = logs.map(l => {
             let key = `dilution:${l.id}`;
             let extras = `<button class="btn btn-sm btn-danger" style="padding:2px 7px;" onclick="event.stopPropagation();deleteDilutionLog('${l.id}')"><i class="ti ti-x"></i></button>`;
-            return buildRecordCard({ key, type: 'dilution', data: l, meta: { icon: 'ti-calculator', color: '#0a84ff', typeLabel: '浓度换算' }, extraButtons: extras });
+            let typeLabel = l.kind === 'powder' ? '粉末配制' : '浓度换算';
+            return buildRecordCard({ key, type: 'dilution', data: l, meta: { icon: 'ti-calculator', color: '#0a84ff', typeLabel }, extraButtons: extras });
         }).join('');
     } catch (e) {
         container.innerHTML = '<div class="empty-state">加载失败</div>';
@@ -1319,7 +2324,7 @@ async function doDilution() {
     let mw = mwRaw ? parseFloat(mwRaw) : null;
     
     if (isNaN(c1) || isNaN(c2) || isNaN(v2)) {
-        showToast("请输入完整的浓度和体积数值，不能为空", "error");
+        showToast("需填写完整的浓度和体积数值", "error");
         return;
     }
 
@@ -1371,33 +2376,61 @@ async function doDilution() {
     }
 }
 
-// 加药设计（板交互）
-function addPlate(type) {
-    let id = STATE.drugPlates.length;
-    let cfg = CONFIG.plate_configs[type];
-    let wells = {};
-    for(let r=0; r<cfg.rows; r++) {
-        for(let c=0; c<cfg.cols; c++) {
-            wells[`${cfg.row_labels[r]}${c+1}`] = { protocol_name: '（空白/对照）' };
-        }
+window.doPowderPreparation = async function() {
+    let concentration = parseFloat(document.getElementById('ccPowderConc').value);
+    let volumeValue = parseFloat(document.getElementById('ccPowderVol').value);
+    let unit = document.getElementById('ccPowderUnit').value;
+    let volumeUnit = document.getElementById('ccPowderVolUnit').value;
+    let molecularWeightRaw = document.getElementById('ccPowderMw').value;
+    let potencyRaw = document.getElementById('ccPowderIu').value;
+    let molecularWeight = molecularWeightRaw ? parseFloat(molecularWeightRaw) : null;
+    let potencyIuPerMg = potencyRaw ? parseFloat(potencyRaw) : null;
+
+    if (isNaN(concentration) || concentration <= 0 || isNaN(volumeValue) || volumeValue <= 0) {
+        showToast('需填写有效的工作液浓度和体积', 'error');
+        return;
     }
-    
-    let harvest = new Date();
-    harvest.setDate(harvest.getDate() + 3);
-    
-    STATE.drugPlates.push({
-        plate_name: `板 ${id+1}`,
-        plate_type: type,
-        wells: wells,
-        induction_density: 70,
-        starvation: false,
-        starvation_hours: 12,
-        media_change_freq: 2,
-        media_change_ratio: "全换",
-        harvest_time: harvest.toISOString().substring(0,16).replace('T', ' ')
-    });
-    renderDrugDesign();
-}
+
+    try {
+        let volumeMl = ccVolumeToMl(volumeValue, volumeUnit);
+        let result = ccCalculatePowderMass(concentration, unit, volumeMl, molecularWeight, potencyIuPerMg);
+        let massText = ccFormatMass(result.massMg);
+        document.getElementById('powderRes').innerHTML = `
+            <div style="padding:12px;background:rgba(52,199,89,0.1);border-radius:8px;border:1px solid #34c759;">
+                 目标总量 <b>${result.amountText}</b>，需称取粉末 <b>${massText}</b>
+            </div>
+        `;
+
+        let payload = {
+            kind: 'powder',
+            name: document.getElementById('ccPowderName').value.trim() || '粉末配制计算',
+            target_conc: concentration,
+            target_unit: unit,
+            final_volume: volumeValue,
+            volume_unit: volumeUnit,
+            volume_ml: volumeMl,
+            mw: molecularWeight,
+            potency_iu_per_mg: potencyIuPerMg,
+            powder_mass_mg: result.massMg,
+            powder_mass_text: massText,
+            amount_text: result.amountText,
+            basis: result.basis
+        };
+        await fetch('/api/dilution/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        loadDilutionHistory();
+    } catch(e) {
+        document.getElementById('powderRes').innerHTML = `
+            <div style="padding:12px;background:rgba(255,55,95,0.1);border-radius:8px;border:1px solid rgba(255,55,95,0.3);color:var(--danger)">
+                 <i class="ti ti-alert-circle"></i> <b>计算失败：</b>${e.message}
+            </div>
+        `;
+        showToast(e.message, 'error');
+    }
+};
 
 // ── Well Assignment Popup State ──
 let _wellPopup = null;
@@ -1481,15 +2514,22 @@ function _handlePopupSelect(e, protoName) {
 
 let autoSaveModelingTimer = null;
 window.autoSaveModeling = function(immediate = false) {
-    if (autoSaveModelingTimer) clearTimeout(autoSaveModelingTimer);
-    if (immediate) {
-        _doModelingAutoSave();
-    } else {
-        autoSaveModelingTimer = setTimeout(_doModelingAutoSave, 500);
+    if (autoSaveModelingTimer) {
+        clearTimeout(autoSaveModelingTimer);
+        autoSaveModelingTimer = null;
     }
+    if (immediate) {
+        return _doModelingAutoSave();
+    } else {
+        autoSaveModelingTimer = setTimeout(() => {
+            autoSaveModelingTimer = null;
+            _doModelingAutoSave();
+        }, 500);
+    }
+    return Promise.resolve();
 };
 async function _doModelingAutoSave() {
-    if(!window._curModelingExp) return;
+    if(!window._curModelingExp || !window._curModelingExp.id) return;
     try {
         let payload = {
             status: window._curModelingExp.status,
@@ -1508,7 +2548,7 @@ async function _doModelingAutoSave() {
 }
 
 window.addEventListener('beforeunload', function() {
-    if (window._curModelingExp) {
+    if (window._curModelingExp && window._curModelingExp.id) {
         let payload = {
             status: window._curModelingExp.status,
             name: window._curModelingExp.name,
@@ -1516,8 +2556,14 @@ window.addEventListener('beforeunload', function() {
             protocols: window._curModelingExp.protocols || [],
             plates: STATE.drugPlates
         };
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        navigator.sendBeacon(`/api/experiments/${window._curModelingExp.id}`, blob);
+        try {
+            fetch(`/api/experiments/${window._curModelingExp.id}`, {
+                method: 'PUT',
+                keepalive: true,
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(payload)
+            });
+        } catch(e) {}
     }
 });
 
@@ -1530,7 +2576,7 @@ function renderDrugDesign() {
         container.innerHTML = `
             <div class="card">
                 <button class="btn btn-primary btn-block" onclick="startModelingExperiment()">
-                    <i class="ti ti-player-play"></i> 开始新细胞造模实验
+                    <i class="ti ti-player-play"></i> 启动细胞造模实验
                 </button>
             </div>
             
@@ -1560,7 +2606,7 @@ function renderDrugDesign() {
             <!-- Unified Setup Form -->
             <div class="form-group">
                 <label class="form-label">实验名称</label>
-                <input type="text" id="ddSetupName" class="form-input" value="${expInfo.name || ''}" placeholder="例如：新建 TGF-b 诱导" oninput="updateModelingExpForm()">
+                <input type="text" id="ddSetupName" class="form-input" value="${expInfo.name || ''}" placeholder="TGF-b 诱导实验" oninput="updateModelingExpForm()">
             </div>
             <div class="form-group">
                 <label class="form-label">实验细胞系</label>
@@ -1569,13 +2615,13 @@ function renderDrugDesign() {
                         <option value="">-- 从档案库选择 --</option>
                         ${cellOpts}
                     </select>
-                    <input type="text" id="ddSetupCellIn" class="form-input" value="${expInfo.cell_line || ''}" placeholder="或手动填写" style="flex:1;" oninput="updateModelingExpForm()">
+                    <input type="text" id="ddSetupCellIn" class="form-input" value="${expInfo.cell_line || ''}" placeholder="输入细胞系" style="flex:1;" oninput="updateModelingExpForm()">
                 </div>
             </div>
             <div class="form-group">
                 <label class="form-label">涉及的诱导方案</label>
                 <div style="background:var(--surface-hover);padding:10px;border-radius:8px;border:1px solid var(--border)">
-                    ${protoOpts || '<div style="color:var(--text-tertiary);font-size:12px">暂无可用方案，请先去方案库配置</div>'}
+                    ${protoOpts || '<div style="color:var(--text-tertiary);font-size:12px">未配置造模方案</div>'}
                 </div>
             </div>
         </div>
@@ -1591,7 +2637,7 @@ function renderDrugDesign() {
         </div>
         <div class="divider"></div>
         <div class="section-title"><i class="ti ti-palette"></i> 配置与分配</div>
-        <div style="font-size:12px;color:#888;margin-bottom:10px;">💡 点击 <b>左上角■</b> 全板 | 点击 <b>列号</b> 整列 | 点击 <b>行字母</b> 整行 | 点击 <b>孔位</b> 单孔 — 弹出方案选择</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">板孔方案分配：全板、整列、整行或单孔均可单独设定。</div>
     `;
     
     let colors = ["#E8E8E8", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8"];
@@ -1613,17 +2659,17 @@ function renderDrugDesign() {
         
         let gridHtml = `<div class="plate-grid-container"><table class="plate-grid"><tbody>`;
         gridHtml += `<tr>`;
-        gridHtml += `<td class="plate-header plate-corner" title="点击选择全板方案" onclick="assignFullPlate(event,${pi})"
+        gridHtml += `<td class="plate-header plate-corner" title="选择全板方案" onclick="assignFullPlate(event,${pi})"
             style="width:${cs}px;height:${cs}px;font-size:${Math.round(cs*0.45)}px">■</td>`;
         for(let c=0; c<pcfg.cols; c++) {
-            gridHtml += `<td class="plate-header plate-col-header" title="点击分配第${c+1}列" onclick="assignColumn(event,${pi},${c})"
+            gridHtml += `<td class="plate-header plate-col-header" title="分配第${c+1}列" onclick="assignColumn(event,${pi},${c})"
                 style="width:${ws}px;font-size:${fs}px"><b>${c+1}</b></td>`;
         }
         gridHtml += `</tr>`;
         
         for(let r=0; r<pcfg.rows; r++) {
             gridHtml += `<tr>`;
-            gridHtml += `<td class="plate-header plate-row-header" title="点击分配第${pcfg.row_labels[r]}行" onclick="assignRow(event,${pi},${r})"
+            gridHtml += `<td class="plate-header plate-row-header" title="分配第${pcfg.row_labels[r]}行" onclick="assignRow(event,${pi},${r})"
                 style="height:${ws}px;font-size:${fs}px"><b>${pcfg.row_labels[r]}</b></td>`;
             for(let c=0; c<pcfg.cols; c++) {
                 let wid = `${pcfg.row_labels[r]}${c+1}`;
@@ -1659,9 +2705,14 @@ function renderDrugDesign() {
                 ${legendHtml}
                 <div class="divider"></div>
                 <div class="form-row">
-                    <div class="form-group"><label class="form-label">换液(天)</label><input type="number" class="form-input" value="${plate.media_change_freq}" onchange="updatePlate(${pi},'media_change_freq',this.value)"></div>
-                    <div class="form-group"><label class="form-label">收样</label><input type="datetime-local" class="form-input" value="${plate.harvest_time.replace(' ', 'T')}" onchange="updatePlate(${pi},'harvest_time',this.value.replace('T', ' '))"></div>
+                    <div class="form-group"><label class="form-label">诱导天数</label><input type="number" class="form-input" min="0" value="${plate.induction_days || 0}" onchange="updatePlate(${pi},'induction_days',this.value)"></div>
+                    <div class="form-group"><label class="form-label">诱导频率</label><input class="form-input" value="${plate.induction_frequency || ''}" placeholder="每日 / 隔日 / 单次" onchange="updatePlate(${pi},'induction_frequency',this.value)"></div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">换液(天)</label><input type="number" class="form-input" min="0" value="${plate.media_change_freq}" onchange="updatePlate(${pi},'media_change_freq',this.value)"></div>
+                    <div class="form-group"><label class="form-label">收样天数</label><input type="number" class="form-input" min="0" value="${plate.harvest_days || 3}" onchange="updatePlate(${pi},'harvest_days',this.value)"></div>
+                </div>
+                <div class="form-group"><label class="form-label">预计收样时间</label><input type="datetime-local" class="form-input" value="${(plate.harvest_time || '').replace(' ', 'T')}" onchange="updatePlate(${pi},'harvest_time',this.value.replace('T', ' '))"></div>
             </div>
         `;
     });
@@ -1694,7 +2745,7 @@ window.updateModelingExpForm = function() {
 
 window.startModelingExperiment = async function() {
     try {
-        let payload = { name: "新建造模实验", cell_line: "", protocols: [], plates: [] };
+        let payload = { name: "细胞造模实验", cell_line: "", protocols: [], plates: [] };
         let res = await fetch('/api/experiments', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1714,9 +2765,9 @@ window.startModelingExperiment = async function() {
 
 window.finishModelingExperiment = async function() {
     if(!window._curModelingExp) return;
-    if(!window._curModelingExp.name) return showToast("请输入实验名称", "error");
-    if(!window._curModelingExp.protocols || window._curModelingExp.protocols.length === 0) return showToast("请至少选择一个造模方案", "error");
-    if(STATE.drugPlates.length === 0) return showToast("无任何板，请至少添加一块", "error");
+    if(!window._curModelingExp.name) return showToast("需填写实验名称", "error");
+    if(!window._curModelingExp.protocols || window._curModelingExp.protocols.length === 0) return showToast("需选择至少一个造模方案", "error");
+    if(STATE.drugPlates.length === 0) return showToast("需添加至少一块培养板", "error");
     
     // Status stays as "进行中" until all plates are harvested
     window._curModelingExp.status = "进行中";
@@ -1725,7 +2776,7 @@ window.finishModelingExperiment = async function() {
         window._curModelingExp = null;
         STATE.drugPlates = [];
         renderDrugDesign();
-        showToast("实验已完成，日程排期已生成！");
+        showToast("实验记录已保存，日程排期已生成");
     } catch(e) { showToast("保存失败", "error"); }
 }
 
@@ -1738,6 +2789,11 @@ function _isDarkColor(hex) {
 
 window.updatePlate = function(idx, key, val) {
     if(key === 'media_change_freq') val = parseInt(val) || 2;
+    if(key === 'induction_days') val = parseInt(val) || 0;
+    if(key === 'harvest_days') {
+        val = parseInt(val) || 0;
+        STATE.drugPlates[idx].harvest_time = addDaysToDateTime(window._curModelingExp?.created_at, val);
+    }
     STATE.drugPlates[idx][key] = val;
     autoSaveModeling();
 }
@@ -1751,18 +2807,20 @@ window.addPlate = function(type) {
             wells[`${cfg.row_labels[r]}${c+1}`] = { protocol_name: '（空白/对照）' };
         }
     }
-    let harvest = new Date();
-    harvest.setDate(harvest.getDate() + 3);
+    let harvestDays = 3;
     STATE.drugPlates.push({
         plate_name: `板 ${id+1}`,
         plate_type: type,
         wells: wells,
         induction_density: 70,
+        induction_days: 0,
+        induction_frequency: '每日',
         starvation: false,
         starvation_hours: 12,
         media_change_freq: 2,
         media_change_ratio: "全换",
-        harvest_time: harvest.toISOString().substring(0,16).replace('T', ' ')
+        harvest_days: harvestDays,
+        harvest_time: addDaysToDateTime(window._curModelingExp?.created_at, harvestDays)
     });
     renderDrugDesign();
     autoSaveModeling();
@@ -1955,8 +3013,55 @@ window.editExperiment = async function(id) {
     let designBtn = document.querySelector('[onclick*="dtDesign"]');
     if (designBtn) designBtn.click();
 
-    showToast(`已恢复「${exp.name}」，修改后点击确认可覆盖或生成新排期`);
+    showToast(`记录已载入：${exp.name}`);
     renderDrugDesign();
+};
+
+window.registerExperimentSamples = async function(id) {
+    if (typeof openModule === 'function') await openModule('drug_treatment');
+    let btn = document.querySelector('.tab-btn[onclick*="dtHarvest"]');
+    if (btn) switchTab(btn, 'dtTab', 'dtHarvest');
+    if (typeof HARVEST_STATE !== 'undefined') {
+        HARVEST_STATE.cellSourceId = id;
+        HARVEST_STATE.cellSelected.clear();
+        HARVEST_STATE.cellBatches = [];
+    }
+    if (typeof loadCellHarvestModule === 'function') await loadCellHarvestModule();
+};
+
+window.saveExperimentSamples = async function(expId) {
+    let modal = document.getElementById('sampleRegisterModal');
+    if (!modal) return;
+    let rows = Array.from(modal.querySelectorAll('.sample-row'));
+    let count = 0;
+    for (let row of rows) {
+        if (!row.querySelector('.sr-check')?.checked) continue;
+        let name = row.querySelector('.sr-name').value.trim();
+        if (!name) continue;
+        let tags = row.querySelector('.sr-tags').value.split(',').map(x => x.trim()).filter(Boolean);
+        await fetch('/api/samples', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                source_type: '细胞造模',
+                source_id: expId,
+                source_label: row.querySelector('.sr-source')?.value.trim() || '细胞造模',
+                group: row.querySelector('.sr-group')?.value.trim() || '',
+                induction_scheme: row.querySelector('.sr-induction')?.value.trim() || '',
+                duration: row.querySelector('.sr-duration')?.value.trim() || '',
+                harvested_at: (row.querySelector('.sr-harvest')?.value || '').replace('T', ' '),
+                material_type: row.querySelector('.sr-type').value,
+                preservation: row.querySelector('.sr-pres').value.trim(),
+                tags,
+                status: '可用',
+                notes: '由细胞造模实验收样登记'
+            })
+        });
+        count++;
+    }
+    modal.remove();
+    showToast(`已登记 ${count} 个样本`);
 };
 
 

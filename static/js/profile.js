@@ -136,45 +136,127 @@ const THEME_PRESETS = {
 };
 
 // ==============================
-// 账户登录/登出 (Mock)
+// 账户管理
 // ==============================
 
-window.profLogin = function() {
-    let name = document.getElementById('profUser').value.trim();
-    if (!name) {
-        showToast('请输入账号名称', 'error');
-        return;
-    }
-    PROF_STATE.user = name;
-    localStorage.setItem('lab_user', name);
+window.profSyncAuthUser = function(user) {
+    PROF_STATE.user = user || null;
     profUpdateLoginView();
-    showToast(`欢迎回来，${name}`);
 };
 
 window.profLogout = function() {
-    PROF_STATE.user = null;
-    localStorage.removeItem('lab_user');
-    document.getElementById('profUser').value = '';
-    document.getElementById('profPwd').value = '';
-    profUpdateLoginView();
-    showToast('已退出登录');
+    if (typeof authLogout === 'function') authLogout();
 };
 
 function profUpdateLoginView() {
-    if (PROF_STATE.user) {
-        let lv = document.getElementById('profLoginView');
-        if(lv) lv.style.display = 'none';
-        let logged = document.getElementById('profLoggedView');
-        if(logged) logged.style.display = 'block';
-        let nameEl = document.getElementById('profCurrentName');
-        if(nameEl) nameEl.innerText = PROF_STATE.user;
-    } else {
-        let lv = document.getElementById('profLoginView');
-        if(lv) lv.style.display = 'block';
-        let logged = document.getElementById('profLoggedView');
-        if(logged) logged.style.display = 'none';
+    let box = document.getElementById('profAccountBox');
+    if (!box) return;
+    let user = PROF_STATE.user || (typeof AUTH_USER !== 'undefined' ? AUTH_USER : null);
+    if (!user) {
+        box.innerHTML = `
+            <div class="empty-state" style="padding:18px 12px;">
+                <i class="ti ti-lock ti-xl"></i>
+                <div style="margin-top:8px">未登录</div>
+            </div>`;
+        return;
     }
+
+    box.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <i class="ti ti-user-check" style="font-size:40px;color:var(--success);"></i>
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:16px;">${user.display_name || user.username}</div>
+                <div style="color:var(--text-secondary);font-size:12px;">${user.username}${user.is_admin ? ' · 管理员' : ''}</div>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="profLogout()"><i class="ti ti-logout"></i> 退出</button>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-title" style="font-size:16px;margin-top:0"><i class="ti ti-key"></i> 修改密码</div>
+        <div class="form-row">
+            <div class="form-group"><label class="form-label">原密码</label><input type="password" class="form-input" id="profOldPwd"></div>
+            <div class="form-group"><label class="form-label">新密码</label><input type="password" class="form-input" id="profNewPwd"></div>
+        </div>
+        <button class="btn btn-secondary btn-block" onclick="profChangePassword()"><i class="ti ti-device-floppy"></i> 保存新密码</button>
+        ${user.is_admin ? `
+            <div class="divider"></div>
+            <div class="section-title" style="font-size:16px;margin-top:0"><i class="ti ti-users-plus"></i> 用户管理</div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">用户名</label><input class="form-input" id="profNewUser" placeholder="new_user"></div>
+                <div class="form-group"><label class="form-label">显示名</label><input class="form-input" id="profNewDisplay" placeholder="姓名/昵称"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label class="form-label">初始密码</label><input type="password" class="form-input" id="profNewUserPwd" placeholder="至少 6 位"></div>
+                <div class="form-group" style="display:flex;align-items:flex-end;"><label style="font-size:13px;display:flex;gap:6px;align-items:center;height:40px;"><input type="checkbox" id="profNewIsAdmin"> 管理员</label></div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="profCreateUser()"><i class="ti ti-user-plus"></i> 添加用户</button>
+            <div id="profUserList" style="margin-top:12px"></div>
+        ` : ''}
+    `;
+    if (user.is_admin) profLoadUsers();
 }
+
+window.profChangePassword = async function() {
+    let old_password = document.getElementById('profOldPwd')?.value || '';
+    let new_password = document.getElementById('profNewPwd')?.value || '';
+    if (!old_password || !new_password) return showToast('需填写原密码和新密码', 'error');
+    try {
+        let res = await fetch('/api/auth/password', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_password, new_password })
+        });
+        let data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.detail || '修改失败');
+        showToast('密码已修改，请重新登录');
+        if (typeof authLogout === 'function') authLogout();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+};
+
+window.profLoadUsers = async function() {
+    let box = document.getElementById('profUserList');
+    if (!box) return;
+    try {
+        let res = await fetch('/api/auth/users');
+        let users = await res.json();
+        if (!res.ok) throw new Error(users.detail || '加载失败');
+        box.innerHTML = users.map(u => `
+            <div class="list-item" style="padding:8px;margin-top:6px;">
+                <div class="list-item-content">
+                    <div class="list-item-title" style="font-size:13px;font-weight:600">${u.display_name || u.username}</div>
+                    <div class="list-item-subtitle">${u.username}${u.is_admin ? ' · 管理员' : ''}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        box.innerHTML = `<div class="empty-state">${e.message}</div>`;
+    }
+};
+
+window.profCreateUser = async function() {
+    let username = document.getElementById('profNewUser').value.trim();
+    let display_name = document.getElementById('profNewDisplay').value.trim();
+    let password = document.getElementById('profNewUserPwd').value;
+    let is_admin = document.getElementById('profNewIsAdmin').checked;
+    if (!username || !password) return showToast('需填写用户名和初始密码', 'error');
+    try {
+        let res = await fetch('/api/auth/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, display_name, password, is_admin })
+        });
+        let data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.detail || '创建失败');
+        showToast('用户已创建');
+        ['profNewUser', 'profNewDisplay', 'profNewUserPwd'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('profNewIsAdmin').checked = false;
+        profLoadUsers();
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+};
 
 // ==============================
 // 个性化设置
@@ -195,7 +277,7 @@ window.profSetMode = function(mode) {
     profApplyTheme();
 };
 
-// 切换主色调（向后兼容）—— 内部委托给 profSetTheme
+// 切换主色调
 window.profSetAccent = function(themeKeyOrColor) {
     if (typeof themeKeyOrColor === 'string' && THEME_PRESETS[themeKeyOrColor]) {
         return profSetTheme(themeKeyOrColor);
@@ -272,7 +354,7 @@ if (window.matchMedia) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
             if (PROF_STATE.themeMode === 'auto') profApplyTheme();
         });
-    } catch (_) { /* old browsers */ }
+    } catch (_) { }
 }
 
 function profUpdateActiveSwatch() {
@@ -299,9 +381,8 @@ function profRenderThemeGrid() {
 // ==============================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. 用户
-    let savedUser = localStorage.getItem('lab_user');
-    if (savedUser) PROF_STATE.user = savedUser;
+    // 1. 用户由后端会话同步
+    if (typeof AUTH_USER !== 'undefined' && AUTH_USER) PROF_STATE.user = AUTH_USER;
     profUpdateLoginView();
 
     // 2. 读取 mode + themeKey 到 state（不立即应用）

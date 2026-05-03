@@ -10,8 +10,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-touch-fullscreen" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>实验小助手</title>
-    <meta name="description" content="实验室管理助手 — 细胞传代、加药方案、日程管理">
+    <title>实验流程管理平台</title>
+    <meta name="description" content="实验全流程记录、样本流转与日程管理平台">
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔬</text></svg>">
     <!-- Google Fonts: Anthropic-like (Source Sans 3 + Source Serif 4 + JetBrains Mono) -->
@@ -24,13 +24,35 @@
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- App Styles -->
-    <link rel="stylesheet" href="/static/css/style.css?v=17">
+    <link rel="stylesheet" href="/static/css/style.css?v=47">
 </head>
 
-<body>
+<body class="auth-pending">
 
     <!-- Toast 容器 -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- 登录入口 -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-panel">
+            <div class="login-brand">
+                <i class="ti ti-flask-2"></i>
+                <div>
+                    <div class="login-title">实验流程管理平台</div>
+                    <div class="login-subtitle">实验记录、样本流转与日程协同</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">账号</label>
+                <input type="text" class="form-input" id="loginUser" placeholder="用户名" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-input" id="loginPwd" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter') authLogin()">
+            </div>
+            <button class="btn btn-primary btn-block" onclick="authLogin()"><i class="ti ti-login-2"></i> 登录</button>
+        </div>
+    </div>
 
     <!-- 主应用 -->
     <div id="app">
@@ -39,7 +61,7 @@
         <div id="page-home" class="page active">
             <div class="page-title">
                 <i class="ti ti-flask-2 ti-md"></i>
-                实验小助手
+                实验流程管理平台
             </div>
 
             <!-- 统计卡 -->
@@ -78,43 +100,36 @@
             <!-- 模块选择 -->
             <div id="expHub">
                 <div class="page-title"><i class="ti ti-microscope ti-md"></i> 实验助手</div>
-                <div class="section-subtitle">选择一个实验模块开始操作</div>
+                <div class="section-subtitle">选择实验流程模块</div>
+
+                <div class="module-section-title"><i class="ti ti-route"></i> 取样与造模</div>
                 <div class="module-grid">
-                    <div class="module-card" onclick="openModule('cell_passage')">
-                        <div class="icon"><i class="ti ti-cell"></i></div>
-                        <div class="name">细胞传代铺板</div>
-                        <div class="desc">传代比例计算、数据校准、传代历史归档</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('drug_treatment')">
-                        <div class="icon"><i class="ti ti-pill"></i></div>
-                        <div class="name">细胞造模</div>
-                        <div class="desc">造模方案、浓度换算、多板分配设计</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('pcr')">
-                        <div class="icon"><i class="ti ti-dna"></i></div>
-                        <div class="name">PCR</div>
-                        <div class="desc">提 RNA、逆转录与 384 qPCR</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('protocols')">
-                        <div class="icon"><i class="ti ti-folder-open"></i></div>
-                        <div class="name">实验方案库</div>
-                        <div class="desc">细胞档案、造模方案、PCR 方案管理</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('wb')">
-                        <div class="icon"><i class="ti ti-layers-subtract"></i></div>
-                        <div class="name">Western Blot</div>
-                        <div class="desc">提取、制胶排配、敷条抗体推算全集成</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('if')">
-                        <div class="icon"><i class="ti ti-microscope"></i></div>
-                        <div class="name">免疫荧光</div>
-                        <div class="desc">抗体稀释计算、染色步骤记录</div>
-                    </div>
-                    <div class="module-card" onclick="openModule('animal')">
-                        <div class="icon"><i class="ti ti-bug"></i></div>
-                        <div class="name">动物造模&取材</div>
-                        <div class="desc">剂量计算、取材记录登记</div>
-                    </div>
+                    <div class="module-card" onclick="openModule('cell_passage')"><div class="icon"><i class="ti ti-cell"></i></div><div class="name">细胞传代铺板</div><div class="desc">传代比例计算、数据校准、传代历史归档</div></div>
+                    <div class="module-card" onclick="openModule('drug_treatment')"><div class="icon"><i class="ti ti-pill"></i></div><div class="name">细胞造模与取材</div><div class="desc">造模设计、按孔取样、同步样本库</div></div>
+                    <div class="module-card" onclick="openModule('animal')"><div class="icon"><i class="ti ti-vaccine"></i></div><div class="name">动物造模与取材</div><div class="desc">分组造模、日程排期、组织取材</div></div>
+                    <div class="module-card" onclick="openModule('patient_harvest')"><div class="icon"><i class="ti ti-user-heart"></i></div><div class="name">患者取材</div><div class="desc">患者样本、部位、类型与保存记录</div></div>
+                </div>
+
+                <div class="module-section-title"><i class="ti ti-flask"></i> 下游实验</div>
+                <div class="module-grid">
+                    <div class="module-card" onclick="openModule('pcr')"><div class="icon"><i class="ti ti-dna"></i></div><div class="name">PCR</div><div class="desc">从样本库导入 RNA 样本并分析</div></div>
+                    <div class="module-card" onclick="openModule('wb')"><div class="icon"><i class="ti ti-layers-subtract"></i></div><div class="name">Western Blot</div><div class="desc">蛋白样本导入、提取配平、转膜检测</div></div>
+                    <div class="module-card" onclick="openModule('if')"><div class="icon"><i class="ti ti-microscope"></i></div><div class="name">免疫荧光</div><div class="desc">固定/切片样本、单标或双标方案</div></div>
+                    <div class="module-card" onclick="openModule('other')"><div class="icon"><i class="ti ti-tool"></i></div><div class="name">其他实验</div><div class="desc">通用实验流程、样本与结果记录</div></div>
+                </div>
+
+                <div class="module-section-title"><i class="ti ti-chart-dots-3"></i> 分析与送样</div>
+                <div class="module-grid">
+                    <div class="module-card" onclick="openModule('bioinfo')"><div class="icon"><i class="ti ti-chart-dots-3"></i></div><div class="name">生信分析</div><div class="desc">数据来源、分析流程、结果文件与结论</div></div>
+                    <div class="module-card" onclick="openModule('sendout')"><div class="icon"><i class="ti ti-truck-delivery"></i></div><div class="name">公司送样</div><div class="desc">送样批次、项目、平台和返回结果</div></div>
+                </div>
+
+                <div class="module-section-title"><i class="ti ti-database"></i> 数据库</div>
+                <div class="module-grid">
+                    <div class="module-card" onclick="openModule('protocols')"><div class="icon"><i class="ti ti-folder-open"></i></div><div class="name">实验方案库</div><div class="desc">细胞、造模、PCR/WB/IF 流程方案</div></div>
+                    <div class="module-card" onclick="openModule('samples')"><div class="icon"><i class="ti ti-database"></i></div><div class="name">样本库</div><div class="desc">RNA、蛋白、固定、蜡块、切片分库</div></div>
+                    <div class="module-card" onclick="openModule('primer_antibody')"><div class="icon"><i class="ti ti-vaccine-bottle"></i></div><div class="name">抗体引物库</div><div class="desc">抗体、引物、靶标与适用实验</div></div>
+                    <div class="module-card" onclick="openModule('reagent')"><div class="icon"><i class="ti ti-bottle"></i></div><div class="name">其他试剂库</div><div class="desc">试剂、耗材、批号与库存位置</div></div>
                 </div>
             </div>
 
@@ -124,15 +139,14 @@
                 <div class="page-title"><i class="ti ti-layers-subtract ti-md"></i> Western Blot</div>
                 
                 <div class="tabs" style="margin-top:12px">
-                    <button class="tab-btn active" onclick="switchTab(this,'wbTab','wbSamples')">样本组</button>
-                    <button class="tab-btn" onclick="switchTab(this,'wbTab','wbExtract')">提取/配平</button>
+                    <button class="tab-btn active" onclick="switchTab(this,'wbTab','wbExtract')">提取/配平</button>
                     <button class="tab-btn" onclick="switchTab(this,'wbTab','wbElectro')">跑胶转膜</button>
                     <button class="tab-btn" onclick="switchTab(this,'wbTab','wbDetect')">裁膜抗体</button>
                 </div>
                 
                 <!-- WB 子面板 -->
-                <div id="wbSamples" class="tab-panel wbTab active" style="padding-bottom:40px;"></div>
-                <div id="wbExtract" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
+                <div id="wbSamples" style="display:none"></div>
+                <div id="wbExtract" class="tab-panel wbTab active" style="padding-bottom:40px;"></div>
                 <div id="wbElectro" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
                 <div id="wbDetect" class="tab-panel wbTab" style="padding-bottom:40px;"></div>
             </div>
@@ -175,12 +189,16 @@
                     <button class="tab-btn active" onclick="switchTab(this,'dtTab','dtDesign'); renderDrugDesign()">
                         <i class="ti ti-layout-grid"></i> 造模实验与记录
                     </button>
+                    <button class="tab-btn" onclick="switchTab(this,'dtTab','dtHarvest'); loadCellHarvestModule()">
+                        <i class="ti ti-vials"></i> 取样实验
+                    </button>
                     <button class="tab-btn" onclick="switchTab(this,'dtTab','dtDilution')">
                         <i class="ti ti-calculator"></i> 浓度换算
                     </button>
                 </div>
                 <!-- The history will be rendered dynamically inside dtDesign -->
                 <div id="dtDesign" class="tab-panel dtTab active" style="padding-bottom:40px;"></div>
+                <div id="dtHarvest" class="tab-panel dtTab" style="padding-bottom:40px;"></div>
                 <div id="dtDilution" class="tab-panel dtTab"></div>
             </div>
 
@@ -192,21 +210,15 @@
                 <div class="page-title"><i class="ti ti-dna ti-md"></i> PCR 实验管理</div>
 
                 <div class="tabs scrollable-tabs">
-                    <button class="tab-btn active" onclick="switchTab(this,'pcrTab','pcrSamples')">
-                        <i class="ti ti-users"></i> 样本设定
-                    </button>
-                    <button class="tab-btn" onclick="switchTab(this,'pcrTab','pcrRna')">
-                        <i class="ti ti-droplet"></i> RNA 提取
-                    </button>
-                    <button class="tab-btn" onclick="switchTab(this,'pcrTab','pcrRt')">
-                        <i class="ti ti-arrows-right-left"></i> 逆转录
+                    <button class="tab-btn active" onclick="switchTab(this,'pcrTab','pcrRna')">
+                        <i class="ti ti-arrows-right-left"></i> RNA提取/逆转录
                     </button>
                     <button class="tab-btn" onclick="switchTab(this,'pcrTab','pcrQpcr')">
                         <i class="ti ti-chart-line"></i> 荧光定量
                     </button>
                 </div>
-                <div id="pcrSamples" class="tab-panel pcrTab active"></div>
-                <div id="pcrRna" class="tab-panel pcrTab"></div>
+                <div id="pcrSamples" style="display:none"></div>
+                <div id="pcrRna" class="tab-panel pcrTab active"></div>
                 <div id="pcrRt" class="tab-panel pcrTab"></div>
                 <div id="pcrQpcr" class="tab-panel pcrTab"></div>
             </div>
@@ -217,16 +229,7 @@
                     <i class="ti ti-chevron-left"></i> 返回实验助手
                 </button>
                 <div class="page-title"><i class="ti ti-microscope ti-md"></i> 免疫荧光实验</div>
-                <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab(this,'ifTab','ifCalc')">
-                        <i class="ti ti-calculator"></i> 抗体稀释计算
-                    </button>
-                    <button class="tab-btn" onclick="switchTab(this,'ifTab','ifLog')">
-                        <i class="ti ti-checklist"></i> 实验记录
-                    </button>
-                </div>
-                <div id="ifCalc" class="tab-panel ifTab active"></div>
-                <div id="ifLog" class="tab-panel ifTab"></div>
+                <div id="ifCalc"></div>
             </div>
 
             <!-- ─── 动物造模&取材模块 ─── -->
@@ -234,17 +237,64 @@
                 <button class="back-btn" onclick="closeModule()">
                     <i class="ti ti-chevron-left"></i> 返回实验助手
                 </button>
-                <div class="page-title"><i class="ti ti-bug ti-md"></i> 动物造模&取材</div>
+                <div class="page-title"><i class="ti ti-vaccine ti-md"></i> 动物造模与取材</div>
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab(this,'animalTab','animalCalc')">
-                        <i class="ti ti-calculator"></i> 给药剂量计算
-                    </button>
-                    <button class="tab-btn" onclick="switchTab(this,'animalTab','animalLog')">
-                        <i class="ti ti-clipboard-list"></i> 实验记录
-                    </button>
+                    <button class="tab-btn active" onclick="switchTab(this,'animalMainTab','animalCalc'); loadAnimalData()"><i class="ti ti-vaccine"></i> 造模记录</button>
+                    <button class="tab-btn" onclick="switchTab(this,'animalMainTab','animalHarvestView'); loadAnimalHarvestModule()"><i class="ti ti-database-plus"></i> 取材实验</button>
                 </div>
-                <div id="animalCalc" class="tab-panel animalTab active"></div>
-                <div id="animalLog" class="tab-panel animalTab"></div>
+                <div id="animalCalc" class="tab-panel animalMainTab active"></div>
+                <div id="animalHarvestView" class="tab-panel animalMainTab"></div>
+            </div>
+
+            <div id="mod-patient_harvest" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()"><i class="ti ti-chevron-left"></i> 返回实验助手</button>
+                <div class="page-title"><i class="ti ti-user-heart ti-md"></i> 患者取材</div>
+                <div id="patientHarvestView"></div>
+            </div>
+
+            <div id="mod-sendout" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()"><i class="ti ti-chevron-left"></i> 返回实验助手</button>
+                <div class="page-title"><i class="ti ti-truck-delivery ti-md"></i> 公司送样</div>
+                <div id="sendoutModuleView"></div>
+            </div>
+
+            <div id="mod-primer_antibody" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()"><i class="ti ti-chevron-left"></i> 返回实验助手</button>
+                <div class="page-title"><i class="ti ti-vaccine-bottle ti-md"></i> 抗体引物库</div>
+                <div id="primerAntibodyView"></div>
+            </div>
+
+            <div id="mod-reagent" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()"><i class="ti ti-chevron-left"></i> 返回实验助手</button>
+                <div class="page-title"><i class="ti ti-bottle ti-md"></i> 其他试剂库</div>
+                <div id="reagentLibraryView"></div>
+            </div>
+
+            <!-- ─── 样本库模块 ─── -->
+            <div id="mod-samples" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()">
+                    <i class="ti ti-chevron-left"></i> 返回实验助手
+                </button>
+                <div class="page-title"><i class="ti ti-database ti-md"></i> 样本库</div>
+                <div id="sampleLibraryView"></div>
+            </div>
+
+            <!-- ─── 生信分析模块 ─── -->
+            <div id="mod-bioinfo" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()">
+                    <i class="ti ti-chevron-left"></i> 返回实验助手
+                </button>
+                <div class="page-title"><i class="ti ti-chart-dots-3 ti-md"></i> 生信分析</div>
+                <div id="bioinfoModuleView"></div>
+            </div>
+
+            <!-- ─── 其他实验模块 ─── -->
+            <div id="mod-other" class="module-view" style="display:none">
+                <button class="back-btn" onclick="closeModule()">
+                    <i class="ti ti-chevron-left"></i> 返回实验助手
+                </button>
+                <div class="page-title"><i class="ti ti-tool ti-md"></i> 其他实验</div>
+                <div id="otherModuleView"></div>
             </div>
 
             <!-- 方案库管理 -->
@@ -253,15 +303,7 @@
                     <i class="ti ti-chevron-left"></i> 返回实验助手
                 </button>
                 <div class="page-title"><i class="ti ti-folder-open ti-md"></i> 实验方案库</div>
-                <div id="cellDbBox"></div>
-                <div class="divider"></div>
-                <div id="drugProtocolsBox"></div>
-                <div class="divider"></div>
-                <div id="pcrProtocolsContainer"></div>
-                <div class="divider"></div>
-                <div id="wbProtocolsContainer"></div>
-                <div class="divider"></div>
-                <div id="mwLibraryBox"></div>
+                <div id="protocolLibraryView"></div>
             </div>
         </div>
 
@@ -271,7 +313,7 @@
 
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab(this,'journalTab','journalEditor')">
-                    <i class="ti ti-pencil"></i> 新建/编辑
+                    <i class="ti ti-pencil"></i> 编辑日志
                 </button>
                 <button class="tab-btn" onclick="switchTab(this,'journalTab','journalHistory'); jnLoadHistory()">
                     <i class="ti ti-history"></i> 日志记录
@@ -297,15 +339,15 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">今日工作</label>
-                    <textarea class="form-textarea" id="jnWork" rows="3" placeholder="完成了哪些工作…"></textarea>
+                    <textarea class="form-textarea" id="jnWork" rows="3" placeholder="记录当日实验操作"></textarea>
                 </div>
                 <div class="form-group">
                     <label class="form-label">结果与观测</label>
-                    <textarea class="form-textarea" id="jnResult" rows="3" placeholder="实验结果、数据描述…"></textarea>
+                    <textarea class="form-textarea" id="jnResult" rows="3" placeholder="记录实验结果与观测数据"></textarea>
                 </div>
                 <div class="form-group">
                     <label class="form-label">思考与总结</label>
-                    <textarea class="form-textarea" id="jnThinking" rows="3" placeholder="问题、下一步…"></textarea>
+                    <textarea class="form-textarea" id="jnThinking" rows="3" placeholder="记录问题、判断与后续计划"></textarea>
                 </div>
                 <button class="btn btn-primary btn-block" style="margin-top:4px" onclick="jnSave()">
                     <i class="ti ti-device-floppy"></i> 保存日志
@@ -333,7 +375,7 @@
                     <i class="ti ti-map-pin"></i> 选中日期明细
                 </div>
                 <button class="btn btn-sm btn-primary" onclick="schOpenCreateModal()">
-                    <i class="ti ti-plus"></i> 新建日程
+                    <i class="ti ti-plus"></i> 创建日程
                 </button>
             </div>
 
@@ -347,30 +389,7 @@
             <!-- 1. 账户管理模块 -->
             <div class="card" style="margin-bottom:12px;">
                 <div class="card-header"><i class="ti ti-user"></i> 账户管理</div>
-
-                <div id="profLoginView">
-                    <div class="form-group">
-                        <label class="form-label">账号 (Email / 用户名)</label>
-                        <input type="text" class="form-input" id="profUser" placeholder="输入账号">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">密码</label>
-                        <input type="password" class="form-input" id="profPwd" placeholder="输入密码">
-                    </div>
-                    <div style="display:flex;gap:8px;margin-top:12px;">
-                        <button class="btn btn-primary" style="flex:1" onclick="profLogin()">登录</button>
-                        <button class="btn btn-secondary" style="flex:1"
-                            onclick="showToast('注册功能演示', 'info')">注册账户</button>
-                    </div>
-                </div>
-
-                <div id="profLoggedView" style="display:none;text-align:center;padding:12px 0;">
-                    <i class="ti ti-user-check"
-                        style="font-size:48px;color:var(--success);margin-bottom:8px;display:block;"></i>
-                    <div style="font-weight:700;font-size:16px;" id="profCurrentName">默认用户</div>
-                    <div style="color:var(--text-secondary);font-size:12px;margin-bottom:16px;">已登录个人账户，数据可同步</div>
-                    <button class="btn btn-secondary btn-block" onclick="profLogout()">退出登录</button>
-                </div>
+                <div id="profAccountBox"></div>
             </div>
 
             <!-- 2. 主题色选择模块 -->
@@ -380,20 +399,17 @@
                 <div class="form-group">
                     <label class="form-label">深/浅色模式</label>
                     <div style="display:flex;gap:8px;">
-                        <button class="btn btn-secondary theme-btn" style="flex:1;font-size:12px;"
-                            onclick="profSetMode('light')"><i class="ti ti-sun"></i> 浅色 (Light)</button>
-                        <button class="btn btn-secondary theme-btn" style="flex:1;font-size:12px;"
-                            onclick="profSetMode('dark')"><i class="ti ti-moon"></i> 深色 (Dark)</button>
-                        <button class="btn btn-secondary theme-btn active" style="flex:1;font-size:12px;"
+                        <button class="btn btn-secondary theme-btn" style="flex:1;"
+                            onclick="profSetMode('light')"><i class="ti ti-sun"></i> 浅色</button>
+                        <button class="btn btn-secondary theme-btn" style="flex:1;"
+                            onclick="profSetMode('dark')"><i class="ti ti-moon"></i> 深色</button>
+                        <button class="btn btn-secondary theme-btn active" style="flex:1;"
                             onclick="profSetMode('auto')"><i class="ti ti-device-desktop"></i> 跟随系统</button>
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">界面主题调色</label>
-                    <div class="section-subtitle" style="margin-bottom:6px;">
-                        选择不同页面底色，重点色与字色将同步匹配
-                    </div>
                     <div class="theme-grid" id="themeGrid"></div>
                 </div>
             </div>
@@ -402,14 +418,14 @@
             <div class="card" style="margin-bottom:12px;text-align:center;">
                 <i class="ti ti-flask-2"
                     style="font-size:36px;color:var(--accent);margin-bottom:4px;display:inline-block;"></i>
-                <div style="font-weight:800;font-size:18px;">实验小助手</div>
-                <div style="font-size:13px;color:var(--text-secondary);margin:4px 0 12px;">Version 2.1.0 (Build
-                    20260418)</div>
-                <div style="font-size:12px;color:var(--text-tertiary);">Author & Creator</div>
+                <div style="font-weight:800;font-size:18px;">实验流程管理平台</div>
+                <div style="font-size:13px;color:var(--text-secondary);margin:4px 0 12px;">Version 0.0.1 (Build
+                    20260503)</div>
+                <div style="font-size:12px;color:var(--text-tertiary);">开发者</div>
                 <div style="font-weight:600;font-size:14px;">LogicXie</div>
                 <div
                     style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-tertiary);">
-                    让实验室的数据管理更加智能优雅。<br>© 2026 LogicXie All Rights Reserved.
+                    实验流程记录、样本流转与数据归档。<br>© 2026 LogicXie All Rights Reserved.
                 </div>
             </div>
 
@@ -425,7 +441,7 @@
         </button>
         <button class="nav-item" data-page="experiment" onclick="navigate('experiment')">
             <i class="ti ti-microscope nav-icon"></i>
-            <span class="nav-label">实验助手</span>
+            <span class="nav-label">实验工作台</span>
         </button>
         <button class="nav-item" data-page="journal" onclick="navigate('journal')">
             <i class="ti ti-notebook nav-icon"></i>
@@ -441,14 +457,16 @@
         </button>
     </nav>
 
-    <script src="/static/js/records.js?v=14"></script>
-    <script src="/static/js/app.js?v=30"></script>
-    <script src="/static/js/wb.js?v=5"></script>
-    <script src="/static/js/pcr.js?v=27"></script>
-    <script src="/static/js/journal.js?v=7"></script>
-    <script src="/static/js/if_module.js?v=1"></script>
-    <script src="/static/js/animal_module.js?v=1"></script>
-    <script src="/static/js/profile.js?v=4"></script>
+    <script src="/static/js/records.js?v=25"></script>
+    <script src="/static/js/app.js?v=48"></script>
+    <script src="/static/js/wb.js?v=21"></script>
+    <script src="/static/js/pcr.js?v=46"></script>
+    <script src="/static/js/journal.js?v=10"></script>
+    <script src="/static/js/workflow_modules.js?v=16"></script>
+    <script src="/static/js/sampling_module.js?v=3"></script>
+    <script src="/static/js/if_module.js?v=15"></script>
+    <script src="/static/js/animal_module.js?v=4"></script>
+    <script src="/static/js/profile.js?v=6"></script>
 </body>
 
 </html>

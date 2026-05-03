@@ -14,15 +14,19 @@ pcrStyle.innerHTML = `
     .rt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .rt-table th { background: var(--surface-hover); padding: 8px; text-align: center; border-bottom: 2px solid var(--border); white-space: nowrap; }
     .rt-table td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    .rt-input { width: 68px; padding: 4px 6px; border: 1.5px solid var(--border); border-radius: 4px; text-align: center; font-size: 13px; }
-    .rt-input:focus { border-color: var(--accent); outline: none; }
-    .rt-input.error { border-color: var(--danger); background: rgba(255,59,48,0.05); }
+    #mod-pcr .rt-input, #pcrProtocolsContainer .rt-input { width: 68px; padding: 4px 6px; border: 1.5px solid var(--border); border-radius: 4px; text-align: center; font-size: 13px; }
+    #mod-pcr .rt-input:focus, #pcrProtocolsContainer .rt-input:focus { border-color: var(--accent); outline: none; }
+    #mod-pcr .rt-input.error, #pcrProtocolsContainer .rt-input.error { border-color: var(--danger); background: rgba(255,59,48,0.05); }
     
-    .strips-container { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; align-items: flex-start; }
-    .strip-wrapper { display: flex; flex-direction: column; }
-    .strip-8 { display: flex; flex-direction: row; gap: 4px; background: rgba(0,0,0,0.04); padding: 8px; border-radius: 8px; }
-    .strip-tube { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; font-size: 9px; background: var(--surface); color: var(--text); font-weight: 700; overflow: hidden; line-height: 1.1; word-break: break-all; transition: background 0.2s; cursor: pointer; }
+    .strips-container { display: flex; flex-wrap: wrap; gap: 18px; margin: 12px 0; align-items: flex-start; }
+    .strip-wrapper { display: flex; flex-direction: column; align-items: center; }
+    .strip-8 { display: flex; flex-direction: row; gap: 6px; background: rgba(0,0,0,0.04); padding: 10px; border-radius: 10px; align-items: center; }
+    .strip-tube { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; font-size: 10px; background: var(--surface); color: var(--text); font-weight: 700; overflow: hidden; line-height: 1.05; word-break: break-word; transition: background 0.2s, transform 0.15s, opacity 0.15s; cursor: pointer; text-align: center; padding: 2px; }
     .strip-tube.filled { background: var(--accent); color: white; border-color: transparent; }
+    .strip-tube:active { transform: scale(0.94); }
+    .strip-actions { display: flex; flex-direction: row; gap: 8px; padding: 10px; align-items: center; min-height: 62px; }
+    .strip-round-btn { width: 42px; height: 42px; min-height: 42px; border-radius: 50%; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; }
+    .strip-round-btn .ti { font-size: 18px; }
     .rt-pop-opt { padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); }
     .rt-pop-opt:hover { background: var(--surface-hover); }
     
@@ -38,9 +42,23 @@ pcrStyle.innerHTML = `
     .legend-tag { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; }
     .color-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
     
-    .qpcr-toolbar { display: flex; flex-wrap: wrap; gap: 10px; background: var(--surface-hover); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 12px; align-items: center; }
+    .qpcr-sample-strip-section { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-hover); padding: 10px; margin: 10px 0 12px; }
+    .qpcr-sample-strip-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .qpcr-sample-strip-head b { font-size: 13px; }
+    .qpcr-sample-strip-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .qpcr-sample-tube { position: relative; }
+    .qpcr-sample-tube:not(.selected) { background: var(--surface); color: var(--text-tertiary); border-style: dashed; opacity: 0.55; }
+    .qpcr-sample-tube:not(.selected)::after { content: ''; position: absolute; width: 28px; height: 2px; background: var(--danger); transform: rotate(-35deg); opacity: 0.75; }
+    .qpcr-toolbar { display: grid; grid-template-columns: 1fr; gap: 8px; background: var(--surface-hover); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+    .qpcr-toolbar-title { font-size:12px; font-weight:600; }
+    .qpcr-paint-controls { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(110px, 1fr) auto auto; gap: 8px; align-items: center; }
+    .qpcr-paint-controls .btn { min-width: 72px; }
     .history-card { cursor: pointer; border-left: 3px solid transparent; }
     .history-card:hover { border-color: var(--accent); background: var(--surface-hover); }
+    @media (max-width: 620px) {
+        .qpcr-paint-controls { grid-template-columns: 1fr 1fr; }
+        .qpcr-paint-controls .form-select { width: 100% !important; }
+    }
 `;
 document.head.appendChild(pcrStyle);
 
@@ -49,6 +67,7 @@ let PCR_STATE = {
     rnaProtocols: [], rnaLogs: [],
     rtProtocols: [], rtLogs: [],
     qpcrProtocols: [], qpcrLogs: [],
+    cdnaSamples: [],
     activeRnaStepsCheck: [],
     rtCurrentSamples: [],
     rtStripMap: [],
@@ -56,6 +75,7 @@ let PCR_STATE = {
     qpcrPlateMap: {},
     qpcrGenes: [],
     qpcrSamples: [],
+    qpcrAllSamples: [],
     activeRtStepsCheck: [],
     activeQpcrStepsCheck: []
 };
@@ -63,14 +83,489 @@ let PCR_STATE = {
 const M_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8", "#FFD93D", "#FF8B94", "#A8E6CF", "#3498DB", "#9B59B6"];
 function getColor(index) { return M_COLORS[index % M_COLORS.length]; }
 
+function pcrDefaultSteps(category) {
+    const map = {
+        rna: ['加入裂解液并充分裂解', '相分离或柱纯化', '洗涤并去除残留试剂', '洗脱 RNA 并记录浓度', '保存 RNA 样本'],
+        rt: ['按样本计算 RNA 与水体积', '加入逆转录反应体系', '混匀离心并置入 PCR 仪', '完成逆转录程序', '保存 cDNA 样本'],
+        qpcr: ['准备引物与 Master Mix', '按板图加入 cDNA 与反应体系', '封板离心并检查气泡', '运行荧光定量程序', '导出 CT 并完成分析']
+    };
+    return map[category] || [];
+}
+
+function pcrIsRnaSample(sample) {
+    let tags = Array.isArray(sample.tags) ? sample.tags.join(' ') : (sample.tags || '');
+    let text = [sample.sample_category, sample.material_category, sample.material_type, tags].join(' ').toLowerCase();
+    return text.includes('rna') && !text.includes('cdna');
+}
+
+function pcrIsCdnaSample(sample) {
+    let tags = Array.isArray(sample.tags) ? sample.tags.join(' ') : (sample.tags || '');
+    let text = [sample.sample_category, sample.material_category, sample.material_type, tags].join(' ').toLowerCase();
+    return text.includes('cdna') || text.includes('cDNA'.toLowerCase());
+}
+
+function pcrRouteCategory(cat, type = '') {
+    return type === 'logs' && cat === 'rna' ? 'extract' : cat;
+}
+
+function pcrBuildGroupsFromSampleLibrary(samples) {
+    let rnaSamples = (samples || []).filter(pcrIsRnaSample);
+    if (rnaSamples.length === 0) return [];
+    let map = new Map();
+    rnaSamples.forEach(sample => {
+        let groupId = sample.collection_id || sample.group_record_id || sample.source_id || sample.source_label || sample.source_type || 'sample_library';
+        let groupName = sample.collection_name || sample.source_label || sample.source_type || '样本库 RNA 样本';
+        if (!map.has(groupId)) map.set(groupId, { id: `library:${groupId}`, name: groupName, samples: [] });
+        map.get(groupId).samples.push({
+            id: sample.id || sample.sample_id || `rna_${map.get(groupId).samples.length + 1}`,
+            name: sample.display_name || sample.name || sample.sample_name || '未命名样本',
+            alias_code: sample.alias_code || '',
+            group: sample.group || sample.treatment_group || '-',
+            day: sample.duration || sample.induction_days || sample.harvest_days || sample.harvested_at || '-',
+            sample_id: sample.id,
+            source: sample.source_label || sample.source_type || '样本库',
+            induction_scheme: sample.induction_scheme || sample.intervention_scheme || '',
+            material_type: sample.material_type || sample.sample_category || ''
+        });
+    });
+    return Array.from(map.values());
+}
+
+function pcrAssignSampleAliases(samples = [], prefix = 'PN') {
+    if (typeof wfAssignSampleAliases === 'function') return wfAssignSampleAliases(samples, prefix);
+    let used = new Set();
+    let aliasPrefix = String(prefix || 'PN').toUpperCase();
+    return (samples || []).map((sample, index) => {
+        let code = String(sample.alias_code || sample.sample_code || '').trim();
+        if (!code || used.has(code)) {
+            let next = index + 1;
+            do { code = `${aliasPrefix}0D0-${next++}`; } while (used.has(code));
+        }
+        used.add(code);
+        sample.alias_code = code;
+        return sample;
+    });
+}
+
+function pcrSampleLabel(sample, fallbackIndex = 0) {
+    if (!sample) return `PN0D0-${fallbackIndex + 1}`;
+    if (!sample.alias_code) sample.alias_code = sample.run_alias_code || `PN0D0-${fallbackIndex + 1}`;
+    return sample.run_alias_code || sample.alias_code;
+}
+
+function pcrRenderSampleAliasTable(samples = []) {
+    if (!Array.isArray(samples) || samples.length === 0) return '';
+    pcrAssignSampleAliases(samples);
+    return `<div class="rt-table-wrapper sample-alias-table-wrap"><table class="rt-table sample-alias-table"><thead><tr><th>代号</th><th>样本</th><th>组别</th><th>时长</th><th>来源</th></tr></thead><tbody>
+        ${samples.map((sample, index) => `<tr><td><input class="rt-input sample-code-input" value="${pcrSampleLabel(sample, index)}" onchange="pcrUpdateSampleAlias(${index}, this.value)"></td><td>${sample.name || '-'}</td><td>${sample.group || '-'}</td><td>${sample.day || sample.duration || '-'}</td><td>${sample.source || '-'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function pcrAttr(value) {
+    return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function pcrBuildStepChecklist(steps, checks, inputPrefix, onchangeName, title = '实验流程步骤', timers = []) {
+    return buildWorkflowStepChecklist(steps, checks, inputPrefix, onchangeName, title, timers);
+}
+
+function pcrDefaultRnaProtocol() {
+    return { id: '', name: '默认 RNA 提取流程', steps: pcrDefaultSteps('rna') };
+}
+
+function pcrDefaultRtProtocol() {
+    return { id: '', name: '默认逆转录流程', total_vol: 20, enzyme_vol: 4, required_rna_ng: 1000, rna_vol: 1000, steps: pcrDefaultSteps('rt') };
+}
+
+function pcrDefaultQpcrProtocol() {
+    return { id: '', name: '默认 qPCR 体系', well_vol: 10, sybr_vol: 5, primer_vol: 1, cdna_vol: 1, steps: pcrDefaultSteps('qpcr') };
+}
+
+function pcrResolveRnaProtocol(id) {
+    return PCR_STATE.rnaProtocols.find(protocol => protocol.id === id) || PCR_STATE.rnaProtocols[0] || pcrDefaultRnaProtocol();
+}
+
+function pcrResolveRtProtocol(id) {
+    return PCR_STATE.rtProtocols.find(protocol => protocol.id === id) || PCR_STATE.rtProtocols[0] || pcrDefaultRtProtocol();
+}
+
+function pcrResolveQpcrProtocol(id) {
+    return PCR_STATE.qpcrProtocols.find(protocol => protocol.id === id) || PCR_STATE.qpcrProtocols[0] || pcrDefaultQpcrProtocol();
+}
+
+function pcrRnaProtocolOptions(selectedId) {
+    let protocols = PCR_STATE.rnaProtocols.length ? PCR_STATE.rnaProtocols : [pcrDefaultRnaProtocol()];
+    return protocols.map(protocol => `<option value="${protocol.id}" ${protocol.id === selectedId ? 'selected' : ''}>${protocol.name}</option>`).join('');
+}
+
+function pcrRtProtocolOptions(selectedId) {
+    let protocols = PCR_STATE.rtProtocols.length ? PCR_STATE.rtProtocols : [pcrDefaultRtProtocol()];
+    return protocols.map(protocol => `<option value="${protocol.id}" ${protocol.id === selectedId ? 'selected' : ''}>${protocol.name} (${protocol.total_vol || 20}μl)</option>`).join('');
+}
+
+function pcrEnsureCheckLength(checks, length) {
+    let arr = Array.isArray(checks) ? checks.slice(0, length) : [];
+    while (arr.length < length) arr.push(false);
+    return arr;
+}
+
+function pcrNormalizeStepTimers(timers, length) {
+    if (typeof labTimerNormalizeList === 'function') return labTimerNormalizeList(timers, length);
+    let source = Array.isArray(timers) ? timers : [];
+    return Array.from({ length }, (_, index) => Math.max(0, Math.round(Number(source[index] || 0))));
+}
+
+function pcrCombinedRnaSteps() {
+    let exp = window._curRnaExp || {};
+    let rnaProtocol = pcrResolveRnaProtocol(exp.protocol_id);
+    let rnaSteps = (exp.steps && exp.steps.length) ? exp.steps : (rnaProtocol.steps || pcrDefaultSteps('rna'));
+    let rtProtocol = pcrResolveRtProtocol(window._curRtExp?.protocol_id || exp.rt_protocol_id);
+    let rtSteps = rtProtocol.steps && rtProtocol.steps.length ? rtProtocol.steps : pcrDefaultSteps('rt');
+    let rnaTimers = pcrNormalizeStepTimers(exp.rna_step_timers || exp.step_timers || rnaProtocol.step_timers, rnaSteps.length);
+    let rtTimers = pcrNormalizeStepTimers(window._curRtExp?.step_timers || exp.rt_step_timers || rtProtocol.step_timers, rtSteps.length);
+    PCR_STATE.activeRnaStepsCheck = pcrEnsureCheckLength(PCR_STATE.activeRnaStepsCheck, rnaSteps.length);
+    PCR_STATE.activeRtStepsCheck = pcrEnsureCheckLength(PCR_STATE.activeRtStepsCheck, rtSteps.length);
+    return {
+        rnaSteps,
+        rtSteps,
+        rnaTimers,
+        rtTimers,
+        combinedSteps: [
+            ...rnaSteps.map(step => `RNA提取 · ${step}`),
+            ...rtSteps.map(step => `逆转录 · ${step}`)
+        ],
+        combinedTimers: [...rnaTimers, ...rtTimers],
+        combinedChecks: [...PCR_STATE.activeRnaStepsCheck, ...PCR_STATE.activeRtStepsCheck]
+    };
+}
+
+function pcrSyncCombinedName(value) {
+    if (window._curRnaExp) window._curRnaExp.name = value;
+    if (window._curRtExp) window._curRtExp.name = value ? `${value} · 逆转录` : '';
+}
+
+function pcrRtSampleFromRna(sample, prior, index, rtProtocol) {
+    let name = sample.name || sample.original || String(sample || '');
+    let keys = [sample.sample_id, sample.id, sample.original, sample.name, sample.alias_code, name].filter(Boolean).map(key => String(key));
+    let keep = keys.map(key => prior.get(key)).find(Boolean) || {};
+    return {
+        ...sample,
+        ...keep,
+        original: sample.original || name,
+        name,
+        alias_code: sample.alias_code || keep.alias_code || '',
+        group: sample.group || keep.group || '-',
+        day: sample.day || sample.duration || keep.day || '-',
+        tube: keep.tube || '-',
+        conc: keep.conc || '',
+        ratio: keep.ratio || '',
+        rna_vol: keep.rna_vol || 0,
+        enzyme_vol: rtProtocol.enzyme_vol || keep.enzyme_vol || 4,
+        water_vol: keep.water_vol || 0,
+        id: sample.id || sample.sample_id || keep.id || `rt_sample_${index + 1}`
+    };
+}
+
+function pcrSyncRtFromRnaSamples(resetStrip = false) {
+    if (!window._curRnaExp) return;
+    let rtProtocol = pcrResolveRtProtocol(window._curRtExp?.protocol_id || window._curRnaExp.rt_protocol_id);
+    if (!window._curRtExp) {
+        window._curRtExp = {
+            name: window._curRnaExp.name ? `${window._curRnaExp.name} · 逆转录` : '',
+            rna_source_name: window._curRnaExp.name || '当前 RNA 提取',
+            protocol_id: rtProtocol.id,
+            req_ng: rtProtocol.required_rna_ng || rtProtocol.rna_vol || 1000,
+            tot_vol: rtProtocol.total_vol || 20,
+            enz_vol: rtProtocol.enzyme_vol || 4,
+            status: '中途保存'
+        };
+    }
+    window._curRtExp.protocol_id = rtProtocol.id;
+    window._curRtExp.req_ng = rtProtocol.required_rna_ng || rtProtocol.rna_vol || 1000;
+    window._curRtExp.tot_vol = rtProtocol.total_vol || 20;
+    window._curRtExp.enz_vol = rtProtocol.enzyme_vol || 4;
+    window._curRtExp.rna_source_name = window._curRnaExp.name || '当前 RNA 提取';
+    let prior = new Map();
+    (PCR_STATE.rtCurrentSamples || []).forEach(sample => {
+        [sample.sample_id, sample.id, sample.original, sample.name, sample.alias_code].filter(Boolean).forEach(key => prior.set(String(key), sample));
+    });
+    PCR_STATE.rtCurrentSamples = pcrAssignSampleAliases((window._curRnaExp.samples || []).map((sample, index) => pcrRtSampleFromRna(sample, prior, index, rtProtocol)));
+    let neededStrips = Math.ceil(PCR_STATE.rtCurrentSamples.length / 8) || 1;
+    let currentSlots = (PCR_STATE.rtStripMap || []).flat().filter(index => index !== null && index < PCR_STATE.rtCurrentSamples.length).length;
+    if (resetStrip || !Array.isArray(PCR_STATE.rtStripMap) || !PCR_STATE.rtStripMap.length || currentSlots === 0) {
+        PCR_STATE.rtStripMap = Array.from({ length: neededStrips }, (_, stripIndex) => Array.from({ length: 8 }, (_, tubeIndex) => {
+            let sampleIndex = stripIndex * 8 + tubeIndex;
+            return sampleIndex < PCR_STATE.rtCurrentSamples.length ? sampleIndex : null;
+        }));
+    } else {
+        PCR_STATE.rtStripMap = PCR_STATE.rtStripMap.map(strip => strip.map(index => index !== null && index < PCR_STATE.rtCurrentSamples.length ? index : null));
+        while (PCR_STATE.rtStripMap.length < neededStrips) PCR_STATE.rtStripMap.push(new Array(8).fill(null));
+    }
+}
+
+function pcrApplyExtractStateToExp(exp = window._curRnaExp) {
+    if (!exp) return null;
+    pcrSyncRtFromRnaSamples(false);
+    let combined = pcrCombinedRnaSteps();
+    let rnaProtocol = pcrResolveRnaProtocol(exp.protocol_id || '');
+    let rtProtocol = pcrResolveRtProtocol(window._curRtExp?.protocol_id || exp.rt_protocol_id || '');
+    exp.protocol_id = rnaProtocol.id || exp.protocol_id || '';
+    exp.protocol_name = rnaProtocol.name || exp.protocol_name || '';
+    exp.rt_protocol_id = rtProtocol.id || exp.rt_protocol_id || '';
+    exp.rt_protocol_name = rtProtocol.name || exp.rt_protocol_name || '';
+    exp.rna_steps = combined.rnaSteps;
+    exp.rt_steps = combined.rtSteps;
+    exp.steps = combined.combinedSteps;
+    exp.rna_step_timers = combined.rnaTimers;
+    exp.rt_step_timers = combined.rtTimers;
+    exp.step_timers = combined.combinedTimers;
+    exp.activeRnaCheck = PCR_STATE.activeRnaStepsCheck;
+    exp.activeRtCheck = PCR_STATE.activeRtStepsCheck;
+    exp.activeCheck = combined.combinedChecks;
+    exp.source_samples = pcrAssignSampleAliases(exp.samples || [], 'PN').map(sample => ({ ...sample }));
+    exp.rt_samples = pcrAssignSampleAliases(PCR_STATE.rtCurrentSamples || [], 'PN').map(sample => ({ ...sample, run_alias_code: sample.alias_code }));
+    exp.stripMap = PCR_STATE.rtStripMap || [];
+    exp.rt_config = {
+        req_ng: window._curRtExp?.req_ng || rtProtocol.required_rna_ng || rtProtocol.rna_vol || 1000,
+        tot_vol: window._curRtExp?.tot_vol || rtProtocol.total_vol || 20,
+        enz_vol: window._curRtExp?.enz_vol || rtProtocol.enzyme_vol || 4
+    };
+    exp.timestamp = exp.timestamp || exp.created_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    return exp;
+}
+
+function pcrFindRtTubePosition(sampleIndex) {
+    for (let stripIndex = 0; stripIndex < (PCR_STATE.rtStripMap || []).length; stripIndex++) {
+        let strip = PCR_STATE.rtStripMap[stripIndex] || [];
+        let tubeIndex = strip.findIndex(value => value === sampleIndex);
+        if (tubeIndex >= 0) return { stripIndex, tubeIndex };
+    }
+    return { stripIndex: Math.floor(sampleIndex / 8), tubeIndex: sampleIndex % 8 };
+}
+
+function pcrBuildCdnaPayload(exp, sample, index, existing) {
+    let pos = pcrFindRtTubePosition(index);
+    let sourceId = sample.sample_id || sample.source_sample_id || sample.id || '';
+    return {
+        ...(existing || {}),
+        id: existing?.id,
+        name: `${exp.name || 'PCR提取逆转录'}-${sample.name || `样本${index + 1}`}-cDNA`,
+        sample_category: 'cDNA',
+        material_category: 'cDNA',
+        material_type: 'cDNA',
+        source_category: sample.source_category || 'PCR',
+        source_type: 'PCR提取逆转录',
+        source_label: exp.name || 'PCR提取逆转录',
+        source_id: exp.id,
+        collection_id: exp.id,
+        collection_name: exp.name || 'PCR提取逆转录',
+        derived_from_id: sourceId,
+        source_sample_id: sourceId,
+        original_sample_name: sample.name || sample.original || '',
+        group: sample.group || sample.treatment_group || '',
+        induction_scheme: sample.induction_scheme || sample.intervention_scheme || sample.group || '',
+        intervention_scheme: sample.intervention_scheme || sample.induction_scheme || sample.group || '',
+        duration: sample.day || sample.duration || sample.intervention_duration || sample.induction_days || '',
+        intervention_duration: sample.day || sample.duration || sample.intervention_duration || sample.induction_days || '',
+        tissue: sample.tissue || sample.material_type || '',
+        preservation: sample.preservation || '-20C cDNA',
+        pcr_extract_id: exp.id,
+        pcr_extract_name: exp.name || '',
+        rt_protocol_name: exp.rt_protocol_name || '',
+        alias_code: sample.alias_code || sample.run_alias_code || '',
+        run_alias_code: sample.alias_code || sample.run_alias_code || '',
+        strip_index: pos.stripIndex,
+        tube_index: pos.tubeIndex,
+        tube_label: `管${pos.stripIndex + 1}`,
+        tube_position: `管${pos.stripIndex + 1}-${pos.tubeIndex + 1}`,
+        conc: sample.conc || '',
+        rna_vol: sample.rna_vol || '',
+        water_vol: sample.water_vol || '',
+        enzyme_vol: sample.enzyme_vol || '',
+        tags: ['qPCR', 'cDNA'],
+        status: '可用'
+    };
+}
+
+async function pcrUpsertCdnaSamples(exp) {
+    if (!exp?.id) return;
+    let existing = [];
+    try {
+        let res = await fetch('/api/samples');
+        existing = await res.json();
+    } catch (e) {}
+    let cdnaExisting = (existing || []).filter(sample => sample.pcr_extract_id === exp.id || (sample.source_type === 'PCR提取逆转录' && sample.source_id === exp.id));
+    let rows = exp.rt_samples || PCR_STATE.rtCurrentSamples || [];
+    await Promise.all(rows.map((sample, index) => {
+        let sourceId = sample.sample_id || sample.source_sample_id || sample.id || '';
+        let prior = cdnaExisting.find(item => (item.source_sample_id || item.derived_from_id || '') === sourceId || item.original_sample_name === sample.name);
+        let payload = pcrBuildCdnaPayload(exp, sample, index, prior);
+        return fetch('/api/samples', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    }));
+    let refreshed = await fetch('/api/samples');
+    let samples = await refreshed.json();
+    PCR_STATE.cdnaSamples = samples.filter(pcrIsCdnaSample);
+}
+
+function pcrSampleKey(sample, fallbackIndex = 0) {
+    if (!sample) return `sample_${fallbackIndex}`;
+    return String(sample.qpcr_key || sample.sample_id || sample.id || sample.original || sample.name || `sample_${fallbackIndex}`);
+}
+
+function pcrSetQpcrSourceSamples(samples = [], selectedKeys = null) {
+    let used = new Map();
+    let allSamples = (samples || []).map((sample, index) => {
+        let item = {
+            ...sample,
+            name: sample.name || sample.original || String(sample || ''),
+            original: sample.original || sample.name || String(sample || ''),
+            alias_code: sample.run_alias_code || sample.alias_code || '',
+            group: sample.group || '-',
+            day: sample.day || sample.duration || sample.intervention_duration || '-',
+            induction_scheme: sample.induction_scheme || sample.intervention_scheme || sample.group || '',
+            sample_id: sample.sample_id || sample.id || '',
+            cdna_sample_id: sample.id || sample.cdna_sample_id || '',
+            source_experiment_name: sample.pcr_extract_name || sample.collection_name || sample.source_label || '',
+            source_tube_label: sample.tube_label || sample.source_tube_label || '',
+            source_tube_index: sample.strip_index ?? sample.source_tube_index ?? 0,
+            source_tube_position: sample.tube_position || sample.source_tube_position || ''
+        };
+        let baseKey = pcrSampleKey(item, index);
+        let count = used.get(baseKey) || 0;
+        used.set(baseKey, count + 1);
+        item.qpcr_key = count ? `${baseKey}#${count + 1}` : baseKey;
+        return item;
+    });
+    PCR_STATE.qpcrAllSamples = pcrAssignSampleAliases(allSamples, 'PQ');
+    let selectSet = selectedKeys ? new Set(Array.from(selectedKeys).map(String)) : new Set(PCR_STATE.qpcrAllSamples.map((sample, index) => pcrSampleKey(sample, index)));
+    PCR_STATE.qpcrSamples = PCR_STATE.qpcrAllSamples.filter((sample, index) => selectSet.has(pcrSampleKey(sample, index)));
+    pcrAssignSampleAliases(PCR_STATE.qpcrSamples, 'PQ');
+    if (window._curQpcrExp) {
+        window._curQpcrExp.all_samples = PCR_STATE.qpcrAllSamples;
+        window._curQpcrExp.samples = PCR_STATE.qpcrSamples;
+    }
+}
+
+function pcrRemoveQpcrSampleFromPlate(sample) {
+    let key = pcrSampleKey(sample);
+    Object.keys(PCR_STATE.qpcrPlateMap || {}).forEach(well => {
+        let value = PCR_STATE.qpcrPlateMap[well];
+        let valueKey = value.sampleObj ? pcrSampleKey(value.sampleObj) : '';
+        if (valueKey === key || value.sample === sample.name) {
+            delete value.sample;
+            delete value.sampleObj;
+            if (!value.gene) delete PCR_STATE.qpcrPlateMap[well];
+        }
+    });
+}
+
+function pcrRenderQpcrSampleStrips() {
+    let allSamples = PCR_STATE.qpcrAllSamples.length ? PCR_STATE.qpcrAllSamples : PCR_STATE.qpcrSamples;
+    if (!allSamples.length) return `<div class="empty-state" style="padding:12px">没有可用 cDNA 样本</div>`;
+    let selected = new Set(PCR_STATE.qpcrSamples.map((sample, index) => pcrSampleKey(sample, index)));
+    let groupMap = new Map();
+    allSamples.forEach((sample, index) => {
+        let sourceId = sample.pcr_extract_id || sample.collection_id || sample.source_id || 'cdna';
+        let tubeIndex = Number(sample.source_tube_index ?? sample.strip_index ?? Math.floor(index / 8));
+        let key = `${sourceId}::${tubeIndex}`;
+        if (!groupMap.has(key)) {
+            groupMap.set(key, {
+                name: sample.source_experiment_name || sample.collection_name || sample.source_label || 'cDNA来源',
+                tubeIndex,
+                samples: []
+            });
+        }
+        groupMap.get(key).samples.push({ sample, absoluteIndex: index });
+    });
+    let groups = Array.from(groupMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '') || a.tubeIndex - b.tubeIndex);
+    let showExperimentName = groups.some((group, _, arr) => arr.filter(x => x.name === group.name).length !== arr.length) || groups.length > 1;
+    let stripHtml = groups.map((group, stripIndex) => `
+        <div class="strip-wrapper">
+            <div style="font-size:10px;text-align:center;color:#888;margin-bottom:2px">${showExperimentName ? `${group.name} · ` : ''}管 ${Number(group.tubeIndex || 0) + 1}</div>
+            <div class="strip-8">
+                ${Array.from({ length: 8 }, (_, tubeIndex) => {
+                    let slot = group.samples.find(item => Number(item.sample.tube_index ?? item.sample.source_tube_position_index ?? item.absoluteIndex % 8) === tubeIndex) || group.samples[tubeIndex];
+                    if (!slot) return `<button type="button" class="strip-tube qpcr-sample-tube" disabled title="空"></button>`;
+                    let sample = slot.sample;
+                    let absoluteIndex = slot.absoluteIndex;
+                    let key = pcrSampleKey(sample, absoluteIndex);
+                    let isSelected = selected.has(key);
+                    return `<button type="button" class="strip-tube qpcr-sample-tube ${isSelected ? 'filled selected' : ''}" data-sample-key="${pcrAttr(key)}" onclick="toggleQpcrSample(this.dataset.sampleKey)" title="${pcrAttr(sample.name || '-')}">${pcrSampleLabel(sample, absoluteIndex)}</button>`;
+                }).join('')}
+            </div>
+        </div>`).join('');
+    return `<div class="qpcr-sample-strip-section">
+        <div class="qpcr-sample-strip-head">
+            <b><i class="ti ti-test-pipe"></i> cDNA 样本（8联管）</b>
+            <div class="qpcr-sample-strip-actions">
+                <button class="btn btn-sm btn-secondary" onclick="pcrOpenQpcrCdnaPicker()"><i class="ti ti-database-import"></i> 导入样本</button>
+                <button class="btn btn-sm btn-secondary" onclick="selectAllQpcrSamples(true)"><i class="ti ti-checks"></i> 全选</button>
+                <button class="btn btn-sm btn-secondary" onclick="selectAllQpcrSamples(false)"><i class="ti ti-square"></i> 清空</button>
+            </div>
+        </div>
+        <div class="strips-container">${stripHtml}</div>
+    </div>`;
+}
+
+window.pcrUpdateSampleAlias = function(index, value) {
+    let target = window._curRnaExp?.samples?.[index] || window._curRtExp?.rna_samples?.[index] || window._curQpcrExp?.samples?.[index];
+    if (target) {
+        target.alias_code = String(value || '').trim();
+        if (!target.alias_code) pcrAssignSampleAliases([target]);
+        if (window._curRnaExp && window._curRnaExp.samples?.[index]) {
+            pcrSyncRtFromRnaSamples(false);
+            renderRtTable();
+            autoSaveExp('rna');
+        }
+    }
+};
+
+window.toggleQpcrSample = function(key) {
+    let allSamples = PCR_STATE.qpcrAllSamples.length ? PCR_STATE.qpcrAllSamples : PCR_STATE.qpcrSamples;
+    let selected = new Set(PCR_STATE.qpcrSamples.map((sample, index) => pcrSampleKey(sample, index)));
+    if (selected.has(key)) {
+        let sample = allSamples.find((item, index) => pcrSampleKey(item, index) === key);
+        if (sample) pcrRemoveQpcrSampleFromPlate(sample);
+        selected.delete(key);
+    } else {
+        selected.add(key);
+    }
+    pcrSetQpcrSourceSamples(allSamples, selected);
+    renderPcrQpcr();
+    autoSaveExp('qpcr');
+};
+
+window.selectAllQpcrSamples = function(checked) {
+    let allSamples = PCR_STATE.qpcrAllSamples.length ? PCR_STATE.qpcrAllSamples : PCR_STATE.qpcrSamples;
+    if (!checked) {
+        allSamples.forEach(sample => pcrRemoveQpcrSampleFromPlate(sample));
+        pcrSetQpcrSourceSamples(allSamples, new Set());
+    } else {
+        pcrSetQpcrSourceSamples(allSamples);
+    }
+    renderPcrQpcr();
+    autoSaveExp('qpcr');
+};
+
 let autoSaveTimers = {};
 window.autoSaveExp = function (cat, immediate = false) {
-    if (autoSaveTimers[cat]) clearTimeout(autoSaveTimers[cat]);
-    if (immediate) {
-        _doAutoSave(cat);
-    } else {
-        autoSaveTimers[cat] = setTimeout(() => _doAutoSave(cat), 300);
+    if (autoSaveTimers[cat]) {
+        clearTimeout(autoSaveTimers[cat]);
+        autoSaveTimers[cat] = null;
     }
+    if (immediate) {
+        return _doAutoSave(cat);
+    } else {
+        autoSaveTimers[cat] = setTimeout(() => {
+            autoSaveTimers[cat] = null;
+            _doAutoSave(cat);
+        }, 300);
+    }
+    return Promise.resolve();
+}
+
+window.pcrAutoSaveRtContext = function (immediate = false) {
+    return autoSaveExp(window._curRnaExp ? 'rna' : 'rt', immediate);
 }
 
 // 离开页面时自动将进行中的实验即时保存（使用 sendBeacon 保证退出时不丢失数据）
@@ -78,45 +573,46 @@ window.addEventListener('beforeunload', function () {
     ['sg', 'rna', 'rt', 'qpcr'].forEach(cat => {
         let exp;
         if (cat === 'sg') { exp = window._curPcrSampleGroup; }
-        else if (cat === 'rna') { exp = window._curRnaExp; if (exp) exp.activeCheck = PCR_STATE.activeRnaStepsCheck; }
-        else if (cat === 'rt') { exp = window._curRtExp; if (exp) { exp.samples = PCR_STATE.rtCurrentSamples; exp.stripMap = PCR_STATE.rtStripMap; exp.activeCheck = PCR_STATE.activeRtStepsCheck; } }
-        else if (cat === 'qpcr') { exp = window._curQpcrExp; if (exp) { exp.plate_map = PCR_STATE.qpcrPlateMap; exp.samples = PCR_STATE.qpcrSamples; exp.activeCheck = PCR_STATE.activeQpcrStepsCheck; } }
+        else if (cat === 'rna') { exp = window._curRnaExp; if (exp) pcrApplyExtractStateToExp(exp); }
+        else if (cat === 'rt') { exp = window._curRtExp; if (exp) { let proto = pcrResolveRtProtocol(exp.protocol_id || ''); let steps = proto.steps && proto.steps.length ? proto.steps : pcrDefaultSteps('rt'); exp.protocol_name = proto.name || exp.protocol_name || ''; exp.step_timers = pcrNormalizeStepTimers(exp.step_timers || proto.step_timers, steps.length); exp.samples = PCR_STATE.rtCurrentSamples; exp.stripMap = PCR_STATE.rtStripMap; exp.activeCheck = PCR_STATE.activeRtStepsCheck; } }
+        else if (cat === 'qpcr') { exp = window._curQpcrExp; if (exp) { let proto = pcrResolveQpcrProtocol(exp.protocol_id || ''); let steps = proto.steps && proto.steps.length ? proto.steps : pcrDefaultSteps('qpcr'); exp.step_timers = pcrNormalizeStepTimers(exp.step_timers || proto.step_timers, steps.length); exp.plate_map = PCR_STATE.qpcrPlateMap; exp.samples = PCR_STATE.qpcrSamples; exp.all_samples = PCR_STATE.qpcrAllSamples; exp.activeCheck = PCR_STATE.activeQpcrStepsCheck; } }
 
         if (exp) {
             const blob = new Blob([JSON.stringify(exp)], { type: 'application/json' });
-            let url = cat === 'sg' ? '/api/pcr/samples/groups' : `/api/pcr/${cat}/logs`;
+            let url = cat === 'sg' ? '/api/pcr/samples/groups' : `/api/pcr/${pcrRouteCategory(cat, 'logs')}/logs`;
             navigator.sendBeacon(url, blob);
         }
     });
 });
 async function _doAutoSave(cat) {
     let exp;
-    let url = `/api/pcr/${cat}/logs`;
+    let url = `/api/pcr/${pcrRouteCategory(cat, 'logs')}/logs`;
     if (cat === 'sg') {
         exp = window._curPcrSampleGroup;
         url = `/api/pcr/samples/groups`;
     } else if (cat === 'rna') {
         exp = window._curRnaExp;
-        if (exp) exp.activeCheck = PCR_STATE.activeRnaStepsCheck;
+        if (exp) pcrApplyExtractStateToExp(exp);
     } else if (cat === 'rt') {
         exp = window._curRtExp;
-        if (exp) { exp.samples = PCR_STATE.rtCurrentSamples; exp.stripMap = PCR_STATE.rtStripMap; exp.activeCheck = PCR_STATE.activeRtStepsCheck; }
+        if (exp) { let proto = pcrResolveRtProtocol(exp.protocol_id || ''); let steps = proto.steps && proto.steps.length ? proto.steps : pcrDefaultSteps('rt'); exp.protocol_name = proto.name || exp.protocol_name || ''; exp.step_timers = pcrNormalizeStepTimers(exp.step_timers || proto.step_timers, steps.length); exp.samples = PCR_STATE.rtCurrentSamples; exp.stripMap = PCR_STATE.rtStripMap; exp.activeCheck = PCR_STATE.activeRtStepsCheck; }
     } else if (cat === 'qpcr') {
         exp = window._curQpcrExp;
-        if (exp) { exp.plate_map = PCR_STATE.qpcrPlateMap; exp.samples = PCR_STATE.qpcrSamples; exp.activeCheck = PCR_STATE.activeQpcrStepsCheck; }
+        if (exp) { let proto = pcrResolveQpcrProtocol(exp.protocol_id || ''); let steps = proto.steps && proto.steps.length ? proto.steps : pcrDefaultSteps('qpcr'); exp.step_timers = pcrNormalizeStepTimers(exp.step_timers || proto.step_timers, steps.length); exp.plate_map = PCR_STATE.qpcrPlateMap; exp.samples = PCR_STATE.qpcrSamples; exp.all_samples = PCR_STATE.qpcrAllSamples; exp.activeCheck = PCR_STATE.activeQpcrStepsCheck; }
     }
     if (!exp) return;
     try {
+        exp.timestamp = exp.timestamp || exp.created_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
         let res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(exp) });
         let data = await res.json();
         if (data && data.id && !exp.id) exp.id = data.id;
 
         if (cat !== 'sg') {
-            let rs = await fetch(`/api/pcr/${cat}/logs`);
+            let rs = await fetch(`/api/pcr/${pcrRouteCategory(cat, 'logs')}/logs`);
             PCR_STATE[`${cat}Logs`] = await rs.json();
             renderPcrHistory(cat);
             // 上游数据更新时，同步刷新下游模块的来源下拉
-            if (cat === 'rna') _refreshRtRnaSelect();
+            if (cat === 'rna') _refreshQpcrRtSelect();
             if (cat === 'rt') _refreshQpcrRtSelect();
         } else {
             let rs = await fetch('/api/pcr/samples/groups');
@@ -153,7 +649,11 @@ function _refreshRtRnaSelect() {
 // 仅刷新 qPCR 页面的 RT 来源下拉，不重绘整个 qPCR 界面
 function _refreshQpcrRtSelect() {
     let sel = document.getElementById('qExpRtLog');
-    if (!sel) return;
+    if (!sel) {
+        let qCard = document.getElementById('pcrQpcr');
+        if (qCard && PCR_STATE.cdnaSamples.length > 0 && qCard.querySelector('.empty-state')) renderPcrQpcr();
+        return;
+    }
     let prev = sel.value;
     let all = PCR_STATE.rtLogs;
     sel.innerHTML = all.map(l =>
@@ -172,30 +672,34 @@ function _refreshQpcrRtSelect() {
 async function loadPcrData() {
     try {
         let rs = await Promise.all([
-            fetch('/api/pcr/rna/protocols'), fetch('/api/pcr/rna/logs'),
-            fetch('/api/pcr/rt/protocols'), fetch('/api/pcr/rt/logs'),
+            fetch('/api/pcr/rna/protocols'),
+            fetch('/api/pcr/rt/protocols'),
+            fetch('/api/pcr/rt/logs'),
             fetch('/api/pcr/qpcr/protocols'), fetch('/api/pcr/qpcr/logs'),
-            fetch('/api/pcr/samples/groups'), fetch('/api/protocols')
+            fetch('/api/protocols'), fetch('/api/samples'),
+            fetch('/api/pcr/extract/logs')
         ]);
         PCR_STATE.rnaProtocols = await rs[0].json();
-        PCR_STATE.rnaLogs = await rs[1].json();
-        PCR_STATE.rtProtocols = await rs[2].json();
-        PCR_STATE.rtLogs = await rs[3].json();
-        PCR_STATE.qpcrProtocols = await rs[4].json();
-        PCR_STATE.qpcrLogs = await rs[5].json();
-        PCR_STATE.sampleGroups = await rs[6].json();
-        PCR_STATE.drugProtocols = await rs[7].json();
+        PCR_STATE.rtProtocols = await rs[1].json();
+        PCR_STATE.rtLogs = await rs[2].json();
+        PCR_STATE.qpcrProtocols = await rs[3].json();
+        PCR_STATE.qpcrLogs = await rs[4].json();
+        PCR_STATE.drugProtocols = await rs[5].json();
+        let sampleInventory = await rs[6].json();
+        PCR_STATE.cdnaSamples = sampleInventory.filter(pcrIsCdnaSample);
+        PCR_STATE.sampleGroups = pcrBuildGroupsFromSampleLibrary(sampleInventory);
+        PCR_STATE.rnaLogs = await rs[7].json();
 
         if (typeof renderPcrSamples === 'function') renderPcrSamples();
         renderPcrRna();
-        renderPcrRt();
         renderPcrQpcr();
         if (typeof renderPcrProtocols === 'function') renderPcrProtocols();
+        if (typeof renderProtocolLibraryHub === 'function') renderProtocolLibraryHub();
     } catch (e) { }
 }
 
 async function savePcrItem(cat, type, payload) {
-    await fetch(`/api/pcr/${cat}/${type}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    await fetch(`/api/pcr/${pcrRouteCategory(cat, type)}/${type}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     await loadPcrData();
     showToast("保存成功！");
 }
@@ -203,7 +707,7 @@ async function savePcrItem(cat, type, payload) {
 async function deletePcrItem(cat, type, id, e) {
     if (e) e.stopPropagation();
     if (!confirm("确定删除？")) return;
-    await fetch(`/api/pcr/${cat}/${type}/${id}`, { method: 'DELETE' });
+    await fetch(`/api/pcr/${pcrRouteCategory(cat, type)}/${type}/${id}`, { method: 'DELETE' });
     showToast("已删除");
     await loadPcrData();
 }
@@ -217,7 +721,7 @@ window.renderPcrHistory = function (cat) {
         return;
     }
     const META = {
-        rna: { icon: 'ti-droplet', color: '#30d158', typeLabel: 'RNA提取' },
+        rna: { icon: 'ti-arrows-right-left', color: '#30d158', typeLabel: 'PCR提取/逆转录' },
         rt: { icon: 'ti-arrows-right-left', color: '#7c3aed', typeLabel: '逆转录' },
         qpcr: { icon: 'ti-chart-line', color: '#ff375f', typeLabel: 'qPCR' },
     };
@@ -249,7 +753,7 @@ window.renderPcrHistory = function (cat) {
             if (done === total) m.typeLabel += ' ✅';
         }
 
-        return buildRecordCard({ key, type: 'pcr_' + cat, data: l, meta: m, extraButtons: extras });
+        return buildRecordCard({ key, type: cat === 'rna' ? 'pcr_extract' : 'pcr_' + cat, data: l, meta: m, extraButtons: extras });
     }).join('');
 }
 
@@ -259,7 +763,19 @@ window._pcrEditLog = function (cat, id) {
     let exp = JSON.parse(JSON.stringify(log));
     if (cat === 'rna') {
         window._curRnaExp = exp;
-        PCR_STATE.activeRnaStepsCheck = exp.activeCheck || new Array((exp.steps||[]).length).fill(false);
+        PCR_STATE.activeRnaStepsCheck = exp.activeRnaCheck || new Array((exp.rna_steps || exp.steps || []).length).fill(false);
+        PCR_STATE.activeRtStepsCheck = exp.activeRtCheck || [];
+        PCR_STATE.rtCurrentSamples = exp.rt_samples || [];
+        PCR_STATE.rtStripMap = exp.stripMap || [];
+        window._curRtExp = {
+            name: exp.name,
+            protocol_id: exp.rt_protocol_id || '',
+            protocol_name: exp.rt_protocol_name || '',
+            req_ng: exp.rt_config?.req_ng || exp.req_ng || 1000,
+            tot_vol: exp.rt_config?.tot_vol || exp.tot_vol || 20,
+            enz_vol: exp.rt_config?.enz_vol || exp.enz_vol || 4,
+            status: exp.status || '中途保存'
+        };
         renderPcrRna();
         document.getElementById('pcrRna').scrollIntoView({ behavior: 'smooth' });
     } else if (cat === 'rt') {
@@ -267,15 +783,28 @@ window._pcrEditLog = function (cat, id) {
         PCR_STATE.rtCurrentSamples = exp.samples || [];
         PCR_STATE.rtStripMap = exp.stripMap || [];
         PCR_STATE.activeRtStepsCheck = exp.activeCheck || [];
-        renderPcrRt();
-        document.getElementById('pcrRt').scrollIntoView({ behavior: 'smooth' });
+        let relatedRna = PCR_STATE.rnaLogs.find(log => log.id === exp.rna_log_id || (exp.rna_source_name && log.name === exp.rna_source_name));
+        window._curRnaExp = relatedRna ? JSON.parse(JSON.stringify(relatedRna)) : {
+            name: exp.rna_source_name || String(exp.name || '').replace(/\s*·\s*逆转录$/, ''),
+            protocol_id: '',
+            protocol_name: '',
+            rt_protocol_id: exp.protocol_id || '',
+            rt_protocol_name: exp.protocol_name || '',
+            samples: pcrAssignSampleAliases((exp.samples || []).map(sample => ({ ...sample }))),
+            steps: pcrDefaultSteps('rna'),
+            status: exp.status || '中途保存'
+        };
+        PCR_STATE.activeRnaStepsCheck = window._curRnaExp.activeCheck || new Array((window._curRnaExp.steps || []).length).fill(false);
+        renderPcrRna();
+        document.getElementById('pcrRna').scrollIntoView({ behavior: 'smooth' });
     } else if (cat === 'qpcr') {
         window._curQpcrExp = exp;
         PCR_STATE.qpcrPlateMap = exp.plate_map || {};
-        PCR_STATE.qpcrSamples = exp.samples || [];
         PCR_STATE.qpcrGenes = exp.genes || [];
         PCR_STATE.qpcrSelectedWells = new Set();
         PCR_STATE.activeQpcrStepsCheck = exp.activeCheck || [];
+        let selectedKeys = new Set((exp.samples || []).map((sample, index) => pcrSampleKey(sample, index)));
+        pcrSetQpcrSourceSamples(exp.all_samples || exp.samples || [], selectedKeys);
         renderPcrQpcr();
         document.getElementById('pcrQpcr').scrollIntoView({ behavior: 'smooth' });
     }
@@ -288,8 +817,8 @@ window.renderPcrProtocols = function () {
     c.innerHTML = `
         <div class="card">
             <div class="card-header"><i class="ti ti-droplet"></i> RNA 提取方案</div>
-            <div class="form-group"><input class="form-input" id="rnaPName" placeholder="方案名 (例如: Trizol)"></div>
-            <div class="form-group"><textarea class="form-textarea" id="rnaPSteps" placeholder="加1ml Trizol\\n震荡..."></textarea></div>
+            <div class="form-group"><input class="form-input" id="rnaPName" placeholder="方案名称：Trizol"></div>
+            ${protocolStepEditor('rnaPSteps')}
             <button class="btn btn-secondary btn-block" onclick="saveRnaProtocol()"><i class="ti ti-device-floppy"></i> 保存 RNA 方案</button>
             <div class="divider"></div>
             ${PCR_STATE.rnaProtocols.map(p => `
@@ -305,8 +834,8 @@ window.renderPcrProtocols = function () {
         
         <div class="card">
             <div class="card-header"><i class="ti ti-arrows-right-left"></i> 逆转录方案</div>
-            <div class="form-group"><input class="form-input" id="rtPName" placeholder="如: 诺唯赞 RT Kit"></div>
-            <div class="form-group"><textarea class="form-textarea" id="rtPSteps" placeholder="步骤提示 (此步骤支持多行，保存后将在实验页面呈现为可折叠提示)..."></textarea></div>
+            <div class="form-group"><input class="form-input" id="rtPName" placeholder="诺唯赞 RT Kit"></div>
+            ${protocolStepEditor('rtPSteps')}
             <div class="form-row">
                 <div class="form-group"><label class="form-label">总量(μL)</label><input type="number" id="rtPTotal" class="form-input" value="20"></div>
                 <div class="form-group"><label class="form-label">酶用量(μL)</label><input type="number" id="rtPEnz" class="form-input" value="4"></div>
@@ -327,8 +856,8 @@ window.renderPcrProtocols = function () {
         
         <div class="card">
             <div class="card-header"><i class="ti ti-chart-line"></i> qPCR 体系方案</div>
-            <div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">体系名称</label><input class="form-input" id="qPName" placeholder="方案名 (如 10ul SYBR)"></div>
-            <div class="form-group"><textarea class="form-textarea" id="qPSteps" placeholder="步骤提示 (此步骤支持多行，保存后将在实验页面呈现为可折叠提示)..."></textarea></div>
+            <div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">体系名称</label><input class="form-input" id="qPName" placeholder="10ul SYBR"></div>
+            ${protocolStepEditor('qPSteps')}
             <div class="form-row"><div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">孔板单孔总液量 (μL)</label><input type="number" id="qPTotal" value="10" placeholder="总量" class="form-input"></div><div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">SYBR/Mix (μL)</label><input type="number" id="qPSybr" value="5" placeholder="SYBR" class="form-input"></div></div>
             <div class="form-row"><div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">引物 (μL)</label><input type="number" id="qPPrimer" value="1" placeholder="引物" class="form-input"></div><div class="form-group"><label class="form-label" style="font-size:12px;color:var(--text-secondary);">cDNA (μL)</label><input type="number" id="qPCdna" value="1" placeholder="cDNA" class="form-input"></div></div>
             <button class="btn btn-secondary btn-block" onclick="saveQpcrProtocol()"><i class="ti ti-device-floppy"></i> 保存 qPCR 体系</button>
@@ -358,9 +887,9 @@ window.renderPcrSamples = function () {
     if (!isOngoing) {
         setupHtml = `
         <div class="card" style="margin-top:8px;">
-            <div class="card-header"><i class="ti ti-users"></i> 新建样本组</div>
-            <div class="form-group"><input class="form-input" id="smpGroupName" placeholder="样本组名称 (如: A549 缺氧模型)"></div>
-            <div class="form-group"><input class="form-input" id="smpGroupSource" placeholder="样本来源 (如: A549 细胞)"></div>
+            <div class="card-header"><i class="ti ti-users"></i> 创建样本组</div>
+            <div class="form-group"><input class="form-input" id="smpGroupName" placeholder="样本组名称：A549 缺氧模型"></div>
+            <div class="form-group"><input class="form-input" id="smpGroupSource" placeholder="样本来源：A549 细胞"></div>
             <div class="form-group">
                 <label class="form-label" style="display:block;margin-bottom:8px;">涉及的诱导方案 (可多选)</label>
                 <div id="smpGroupSchemes" style="display:flex; flex-wrap:wrap; gap:12px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);">
@@ -383,7 +912,7 @@ window.renderPcrSamples = function () {
                     <h3 style="margin:0;font-size:16px;">[${g.name}]</h3>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">来源: ${g.source || '-'} | 方案: ${pNames || '-'}</div>
                 </div>
-                <button class="btn btn-sm btn-secondary" onclick="window._curPcrSampleGroup=null;window._currentEditingSmpGroup=null;renderPcrSamples()"><i class="ti ti-x"></i> 取消设定</button>
+                <button class="btn btn-sm btn-secondary" onclick="window._curPcrSampleGroup=null;window._currentEditingSmpGroup=null;renderPcrSamples()"><i class="ti ti-x"></i> 取消</button>
             </div>
             
             <div class="divider"></div>
@@ -394,11 +923,11 @@ window.renderPcrSamples = function () {
             
             <div class="rt-table-wrapper">
                 <table class="rt-table" id="smpGroupTable">
-                    <thead><tr><th>样本名称</th><th>诱导方案/组别</th><th>时间点(天/时)</th><th style="width:50px;">操作</th></tr></thead>
+                    <thead><tr><th style="width:50px;">操作</th><th>样本名称</th><th>诱导方案/组别</th><th>时间点(天/时)</th></tr></thead>
                     <tbody id="smpGroupTbody"></tbody>
                 </table>
             </div>
-            <button class="btn btn-success btn-block" style="margin-top:12px;" onclick="saveSampleGroup()"><i class="ti ti-circle-check"></i> 确认保存配置</button>
+            <button class="btn btn-success btn-block" style="margin-top:12px;" onclick="saveSampleGroup()"><i class="ti ti-circle-check"></i> 保存样本组</button>
         </div>`;
     }
 
@@ -446,7 +975,7 @@ window.renderPcrSamples = function () {
 window.startPcrSampleGroup = function () {
     let name = document.getElementById('smpGroupName').value.trim();
     let source = document.getElementById('smpGroupSource').value.trim();
-    if (!name) return showToast("请输入样本组名称", "error");
+    if (!name) return showToast("需填写样本组名称", "error");
 
     let schemes = [];
     document.querySelectorAll('.smp-scheme-cb:checked').forEach(cb => schemes.push(cb.value));
@@ -486,10 +1015,10 @@ window.addPcrSampleRow = function (existingSample = null) {
 
     let tr = document.createElement('tr');
     tr.innerHTML = `
-        <td><input type="text" class="rt-input" style="width:100%;box-sizing:border-box;" placeholder="名字 (如 S1)" value="${existingSample ? existingSample.name : ''}" oninput="sgSyncTable()"></td>
+        <td style="width:50px;text-align:center;"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove();sgSyncTable()"><i class="ti ti-minus"></i></button></td>
+        <td><input type="text" class="rt-input" style="width:100%;box-sizing:border-box;" placeholder="样本名 S1" value="${existingSample ? existingSample.name : ''}" oninput="sgSyncTable()"></td>
         <td><select class="rt-input" style="width:100%;box-sizing:border-box;" onchange="sgSyncTable()">${schemeOpts}</select></td>
         <td><input type="text" class="rt-input" style="width:100%;box-sizing:border-box;" placeholder="数值(例:1)" value="${existingSample ? existingSample.day : '1'}" oninput="sgSyncTable()"></td>
-        <td style="width:50px;text-align:center;"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove();sgSyncTable()"><i class="ti ti-minus"></i></button></td>
     `;
 
     if (existingSample && existingSample.group) {
@@ -524,7 +1053,7 @@ window.saveSampleGroup = async function () {
         name: window._curPcrSampleGroup.name,
         source: window._curPcrSampleGroup.source,
         induction_schemes: window._curPcrSampleGroup.induction_schemes,
-        induction_days: [], // 保留空数组保持向下兼容
+        induction_days: [],
         samples,
         status: "已完成"
     };
@@ -558,93 +1087,165 @@ window.renderPcrRna = function () {
     let c = document.getElementById('pcrRna');
     if (!c) return;
     let hasExp = !!window._curRnaExp;
-    let noProto = PCR_STATE.rnaProtocols.length === 0;
     let workHtml = '';
     if (hasExp) {
         let exp = window._curRnaExp;
-        let protoOptions = PCR_STATE.rnaProtocols.map(p => `<option value="${p.id}" ${p.id === exp.protocol_id ? 'selected' : ''}>${p.name}</option>`).join('');
-        let groupOptions = '<option value="">-- 手动输入或自动导入 --</option>' + PCR_STATE.sampleGroups.map(g => `<option value="${g.id}">${g.name} (${(g.samples||[]).length}样)</option>`).join('');
-        let samplesStr = (exp.samples || []).map(s => s.original || s.name || s).join(', ');
-        let steps = exp.steps || [];
-        let checks = PCR_STATE.activeRnaStepsCheck || [];
-        let stepsHtml = steps.map((s, i) => `
-            <label class="step-item ${checks[i] ? 'checked' : ''}" id="rnaStepItem_${i}">
-                <input type="checkbox" class="step-checkbox" ${checks[i] ? 'checked' : ''} onchange="toggleRnaStep(${i}, this.checked)">
-                <div><b>Step ${i + 1}.</b> ${s}</div>
-            </label>`).join('');
+        pcrSyncRtFromRnaSamples(false);
+        let rtExp = window._curRtExp || {};
+        let protoOptions = pcrRnaProtocolOptions(exp.protocol_id || '');
+        let rtProtoOptions = pcrRtProtocolOptions(rtExp.protocol_id || exp.rt_protocol_id || '');
+        let combined = pcrCombinedRnaSteps();
+        let stepsHtml = pcrBuildStepChecklist(combined.combinedSteps, combined.combinedChecks, 'rnaRtStep', 'toggleRnaRtStep', 'RNA提取与逆转录流程步骤', combined.combinedTimers);
         workHtml = `
-        <div class="card" style="margin-top:8px;">
+        <div class="card workflow-panel" style="margin-top:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                <div style="font-weight:700;font-size:15px;"><i class="ti ti-microscope" style="color:var(--primary)"></i> RNA 提取实验</div>
-                <button class="btn btn-sm btn-secondary" onclick="window._curRnaExp=null;PCR_STATE.activeRnaStepsCheck=[];renderPcrRna()"><i class="ti ti-x"></i></button>
+                <div style="font-weight:700;font-size:15px;"><i class="ti ti-arrows-right-left" style="color:var(--primary)"></i> RNA提取/逆转录联合实验</div>
+                <button class="btn btn-sm btn-secondary" onclick="closeRnaRtExperiment()"><i class="ti ti-x"></i></button>
             </div>
-            <div class="form-group"><label class="form-label">实验名称</label><input class="form-input" id="rnaExpName" value="${exp.name || ''}" placeholder="如：第一批RNA提取" oninput="if(window._curRnaExp)window._curRnaExp.name=this.value"></div>
+            <div class="form-group"><label class="form-label">实验名称</label><input class="form-input" id="rnaExpName" value="${exp.name || ''}" placeholder="如：第一批RNA提取/逆转录" oninput="pcrSyncCombinedName(this.value)"></div>
             <div class="form-row">
-                <div class="form-group"><label class="form-label">提取方案</label><select class="form-select" id="rnaExpProto" onchange="_onRnaProtoChange()">${protoOptions}</select></div>
-                <div class="form-group"><label class="form-label">从样本组导入</label><select class="form-select" id="rnaExpGroupSelect" onchange="onRnaGroupSelect(this.value)">${groupOptions}</select></div>
+                <div class="form-group"><label class="form-label">RNA提取方案</label><select class="form-select" id="rnaExpProto" onchange="_onRnaProtoChange()">${protoOptions}</select></div>
+                <div class="form-group"><label class="form-label">逆转录方案</label><select class="form-select" id="rtExpProto" onchange="_onRtProtoChange()">${rtProtoOptions}</select></div>
+                <div class="form-group"><label class="form-label">样本</label><button class="btn btn-secondary btn-block" onclick="pcrOpenRnaSamplePicker()"><i class="ti ti-database-import"></i> 导入样本</button></div>
             </div>
-            <div class="form-group"><label class="form-label">样本列表 (逗号分隔)</label><input class="form-input" id="rnaExpSamples" value="${samplesStr}" placeholder="S1, S2, S3"></div>
-            ${steps.length > 0 ? `<div class="divider"></div>
-                <div class="section-title"><i class="ti ti-checklist"></i> 操作步骤</div>
-                <div id="rnaRunSteps" class="step-list">${stepsHtml}</div>` : ''}
-            <button class="btn btn-success btn-block" style="margin-top:12px;" onclick="finishRnaExperiment()"><i class="ti ti-circle-check"></i> 完成并保存记录</button>
+            ${pcrRenderSampleAliasTable(exp.samples || [])}
+            ${stepsHtml}
+            <div class="section-title"><i class="ti ti-test-pipe"></i> 逆转录配液与八联管</div>
+            <div style="font-size:12px;margin-bottom:8px;color:#888;" id="rtRunDesc">总量:${window._curRtExp?.tot_vol || '-'}μl, 目标:${window._curRtExp?.req_ng || '-'}ng</div>
+            <div class="rt-table-wrapper">
+                <table class="rt-table">
+                    <thead><tr><th>操作</th><th>代号</th><th>样本</th><th>管孔</th><th>浓度(ng/µL)</th><th>260/280</th><th>RNA(µL)</th><th>酶(µL)</th><th>H2O(µL)</th></tr></thead>
+                    <tbody id="rtTableBody"></tbody>
+                </table>
+            </div>
+            <div class="strips-container" id="rtStripsBox"></div>
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <button class="btn btn-secondary" style="flex:1" onclick="autoSaveExp('rna', true)"><i class="ti ti-device-floppy"></i> 暂存进度</button>
+                <button class="btn btn-success" style="flex:1" onclick="finishRnaExperiment()"><i class="ti ti-circle-check"></i> 完成并生成 cDNA 样本</button>
+            </div>
         </div>`;
     }
     c.innerHTML = `
         ${hasExp ? workHtml : `<div class="card" style="margin-top:8px;">
-            <button class="btn btn-primary btn-block" ${noProto ? 'disabled title="请先建立方案"' : ''} onclick="_startNewRna()"><i class="ti ti-player-play"></i> 开始新 RNA 提取实验</button>
+            <button class="btn btn-primary btn-block" onclick="_startNewRna()"><i class="ti ti-player-play"></i> 启动 RNA提取/逆转录实验</button>
         </div>`}
         <div class="divider"></div>
-        <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
+        <div class="section-title"><i class="ti ti-history"></i> PCR提取/逆转录记录</div>
         <div id="pcrrnaHistoryDiv"></div>`;
+    if (hasExp) renderRtTable();
     renderPcrHistory('rna');
 }
 
 window._startNewRna = function () {
-    let proto = PCR_STATE.rnaProtocols[0];
-    window._curRnaExp = { name: '', protocol_id: proto ? proto.id : '', protocol_name: proto ? proto.name : '', samples: [], steps: proto ? [...proto.steps] : [], status: '中途保存' };
-    PCR_STATE.activeRnaStepsCheck = new Array((proto ? proto.steps : []).length).fill(false);
+    let proto = pcrResolveRnaProtocol('');
+    let rtProto = pcrResolveRtProtocol('');
+    let steps = proto.steps && proto.steps.length ? [...proto.steps] : pcrDefaultSteps('rna');
+    let rtSteps = rtProto.steps && rtProto.steps.length ? [...rtProto.steps] : pcrDefaultSteps('rt');
+    window._curRnaExp = { name: '', protocol_id: proto.id, protocol_name: proto.name, rt_protocol_id: rtProto.id, rt_protocol_name: rtProto.name, samples: [], steps, step_timers: pcrNormalizeStepTimers(proto.step_timers, steps.length), status: '中途保存' };
+    window._curRtExp = { name: '', rna_source_name: '当前 RNA 提取', protocol_id: rtProto.id, protocol_name: rtProto.name, step_timers: pcrNormalizeStepTimers(rtProto.step_timers, rtSteps.length), req_ng: rtProto.required_rna_ng || rtProto.rna_vol || 1000, tot_vol: rtProto.total_vol || 20, enz_vol: rtProto.enzyme_vol || 4, status: '中途保存' };
+    PCR_STATE.activeRnaStepsCheck = new Array(steps.length).fill(false);
+    PCR_STATE.activeRtStepsCheck = new Array(rtSteps.length).fill(false);
+    PCR_STATE.rtCurrentSamples = [];
+    PCR_STATE.rtStripMap = [new Array(8).fill(null)];
     renderPcrRna();
     autoSaveExp('rna', true);
 }
 
+window.closeRnaRtExperiment = function() {
+    window._curRnaExp = null;
+    window._curRtExp = null;
+    PCR_STATE.activeRnaStepsCheck = [];
+    PCR_STATE.activeRtStepsCheck = [];
+    PCR_STATE.rtCurrentSamples = [];
+    PCR_STATE.rtStripMap = [];
+    renderPcrRna();
+};
+
 window._onRnaProtoChange = function () {
     let pid = document.getElementById('rnaExpProto').value;
-    let proto = PCR_STATE.rnaProtocols.find(p => p.id === pid);
+    let proto = pcrResolveRnaProtocol(pid);
     if (proto && window._curRnaExp) {
         _syncRnaSamples();
         window._curRnaExp.protocol_id = proto.id;
         window._curRnaExp.protocol_name = proto.name;
-        window._curRnaExp.steps = [...proto.steps];
-        PCR_STATE.activeRnaStepsCheck = new Array(proto.steps.length).fill(false);
+        window._curRnaExp.steps = proto.steps && proto.steps.length ? [...proto.steps] : pcrDefaultSteps('rna');
+        window._curRnaExp.step_timers = pcrNormalizeStepTimers(proto.step_timers, window._curRnaExp.steps.length);
+        PCR_STATE.activeRnaStepsCheck = new Array(window._curRnaExp.steps.length).fill(false);
         renderPcrRna();
+        autoSaveExp('rna');
     }
 }
 
 function _syncRnaSamples() {
     if (!window._curRnaExp) return;
     let el = document.getElementById('rnaExpSamples');
-    if (!el) return;
+    if (!el) {
+        window._curRnaExp.samples = pcrAssignSampleAliases(window._curRnaExp.samples || []);
+        return;
+    }
+    let prior = new Map();
+    (window._curRnaExp.samples || []).forEach(sample => {
+        [sample.original, sample.name, sample.alias_code].filter(Boolean).forEach(key => prior.set(String(key).trim(), sample));
+    });
     window._curRnaExp.samples = el.value.split(/[,，]+/).map(s => s.trim()).filter(s => s).map(str => {
         let m = str.match(/^([^(]+)(?:\(([^-]+)-([^)]+)\))?$/);
-        if (m) return { original: str, name: m[1].trim(), group: m[2] ? m[2].trim().replace(/_/g, ',') : '对照组', day: m[3] ? m[3].trim() : '-' };
-        return { original: str, name: str, group: '对照组', day: '-' };
+        let name = m ? m[1].trim() : str;
+        let keep = prior.get(str) || prior.get(name) || {};
+        return {
+            ...keep,
+            original: str,
+            name,
+            group: m && m[2] ? m[2].trim().replace(/_/g, ',') : (keep.group || '对照组'),
+            day: m && m[3] ? m[3].trim() : (keep.day || '-'),
+        };
     });
+    pcrAssignSampleAliases(window._curRnaExp.samples);
 }
 
 window.onRnaGroupSelect = function (gid) {
     let input = document.getElementById('rnaExpSamples');
-    if (!gid) { input.value = ''; return; }
+    if (!gid) { if (input) input.value = ''; return; }
     let g = PCR_STATE.sampleGroups.find(x => x.id === gid);
-    if (g) input.value = g.samples.map(s => `${s.name}(${s.group.replace(/[,，]/g, '_')}-${s.day})`).join(', ');
+    if (g) {
+        window._curRnaExp.samples = pcrAssignSampleAliases((g.samples || []).map(sample => ({ ...sample, alias_code: sample.alias_code || '' })));
+        if (input) input.value = window._curRnaExp.samples.map(s => `${s.name}(${String(s.group || '-').replace(/[,，]/g, '_')}-${s.day || '-'})`).join(', ');
+    }
 }
+
+window.pcrOpenRnaSamplePicker = function() {
+    if (!window._curRnaExp) return;
+    if (typeof wfOpenSampleGroupPicker !== 'function') return showToast('样本组选择器未加载', 'error');
+    let librarySamples = (PCR_STATE.sampleGroups || []).flatMap(group => (group.samples || []).map((sample, index) => ({
+        ...sample,
+        id: sample.sample_id || sample.id || `${group.id}_${index}`,
+        collection_id: group.id,
+        collection_name: group.name,
+        display_name: sample.name,
+        alias_code: sample.alias_code || '',
+    })));
+    wfOpenSampleGroupPicker({
+        title: '导入样本',
+        samples: librarySamples,
+        aliasPrefix: 'PN',
+        emptyText: '没有可导入的 RNA 样本组',
+        onImport(selected) {
+            window._curRnaExp.samples = pcrAssignSampleAliases(selected.map(sample => ({ ...sample, alias_code: sample.alias_code || '' })), 'PN');
+            pcrSyncRtFromRnaSamples(true);
+            renderPcrRna();
+            autoSaveExp('rna');
+        }
+    });
+};
 
 window.saveRnaProtocol = async function () {
     let name = document.getElementById('rnaPName').value;
-    let sStr = document.getElementById('rnaPSteps').value;
-    if (!name || !sStr) return showToast("信息不完整", "error");
-    let payload = { name, steps: sStr.split('\n').map(x => x.trim()).filter(x => x) };
+    let steps = typeof protocolReadSteps === 'function'
+        ? protocolReadSteps('rnaPSteps')
+        : (document.getElementById('rnaPSteps')?.value || '').split('\n').map(x => x.trim()).filter(x => x);
+    if (!name || !steps.length) return showToast("信息不完整", "error");
+    let payload = { name, steps, step_timers: typeof protocolReadStepTimers === 'function' ? protocolReadStepTimers('rnaPSteps') : [] };
     if (window._currentEditingRnaProtoId) { payload.id = window._currentEditingRnaProtoId; window._currentEditingRnaProtoId = null; }
+    if (typeof protocolFinishSave === 'function') await protocolFinishSave();
     await savePcrItem('rna', 'protocols', payload);
 }
 
@@ -653,7 +1254,8 @@ window.editRnaP = function (id) {
     if (!p) return;
     window._currentEditingRnaProtoId = p.id;
     document.getElementById('rnaPName').value = p.name;
-    document.getElementById('rnaPSteps').value = p.steps.join('\n');
+    if (typeof protocolSetSteps === 'function' && protocolSetSteps('rnaPSteps', p.steps || [], p.step_timers || [])) {}
+    else if (document.getElementById('rnaPSteps')) document.getElementById('rnaPSteps').value = (p.steps || []).join('\n');
     document.getElementById('rnaPName').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -664,11 +1266,24 @@ window.toggleRnaStep = function (i, checked) {
     autoSaveExp('rna');
 }
 
+window.toggleRnaRtStep = function(i, checked) {
+    let combined = pcrCombinedRnaSteps();
+    if (i < combined.rnaSteps.length) {
+        PCR_STATE.activeRnaStepsCheck[i] = checked;
+        autoSaveExp('rna');
+    } else {
+        PCR_STATE.activeRtStepsCheck[i - combined.rnaSteps.length] = checked;
+        autoSaveExp('rna');
+    }
+    let el = document.getElementById(`rnaRtStepItem_${i}`);
+    if (el) el.classList.toggle('checked', checked);
+};
+
 window.toggleRtStep = function (i, checked) {
     PCR_STATE.activeRtStepsCheck[i] = checked;
     let el = document.getElementById(`rtStepItem_${i}`);
     if (el) { if (checked) el.classList.add('checked'); else el.classList.remove('checked'); }
-    autoSaveExp('rt');
+    pcrAutoSaveRtContext();
 }
 
 window.toggleQpcrStep = function (i, checked) {
@@ -678,20 +1293,27 @@ window.toggleQpcrStep = function (i, checked) {
     autoSaveExp('qpcr');
 }
 
-window.finishRnaExperiment = function () {
+window.finishRnaExperiment = async function () {
     _syncRnaSamples();
+    pcrSyncRtFromRnaSamples(false);
     let exp = window._curRnaExp;
-    if (!exp.name) return showToast("请填写实验名称", "error");
-    if (!exp.samples || exp.samples.length === 0) return showToast("请填写样本", "error");
+    if (!exp.name) return showToast("需填写实验名称", "error");
+    if (!exp.samples || exp.samples.length === 0) return showToast("需填写样本", "error");
     exp.status = "已完成";
-    exp.activeCheck = PCR_STATE.activeRnaStepsCheck;
-    autoSaveExp('rna', true);
+    pcrApplyExtractStateToExp(exp);
+    await autoSaveExp('rna', true);
     let existing = PCR_STATE.rnaLogs.find(l => l.id === exp.id);
     if (existing) existing.status = '已完成';
+    await pcrUpsertCdnaSamples(exp);
     window._curRnaExp = null;
+    window._curRtExp = null;
     PCR_STATE.activeRnaStepsCheck = [];
+    PCR_STATE.activeRtStepsCheck = [];
+    PCR_STATE.rtCurrentSamples = [];
+    PCR_STATE.rtStripMap = [];
     renderPcrRna();
-    _refreshRtRnaSelect();
+    _refreshQpcrRtSelect();
+    showToast("PCR提取/逆转录记录已保存，cDNA样本已入库");
 }
 
 // -------------------------------------------------------- RT
@@ -700,7 +1322,7 @@ function renderPcrRt() {
     if (!c) return;
     let hasExp = !!window._curRtExp;
     let noReady = PCR_STATE.rtProtocols.length === 0 || PCR_STATE.rnaLogs.length === 0;
-    let disabledMsg = PCR_STATE.rtProtocols.length === 0 ? '请先建立 RT 方案' : (PCR_STATE.rnaLogs.length === 0 ? '请先完成 RNA 提取' : '');
+    let disabledMsg = PCR_STATE.rtProtocols.length === 0 ? '需先建立 RT 方案' : (PCR_STATE.rnaLogs.length === 0 ? '需先完成 RNA 提取' : '');
 
     let workHtml = '';
     if (hasExp) {
@@ -709,7 +1331,7 @@ function renderPcrRt() {
         let rnaLogOptions = PCR_STATE.rnaLogs.map(l => `<option value="${l.id}" ${l.id === exp.rna_log_id ? 'selected' : ''}>${l.name} (${(l.samples||[]).length}样)</option>`).join('');
 
         workHtml = `
-        <div class="card" style="margin-top:8px;">
+        <div class="card workflow-panel" style="margin-top:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                 <div style="font-weight:700;font-size:15px;"><i class="ti ti-arrows-right-left" style="color:var(--primary)"></i> 逆转录实验</div>
                 <button class="btn btn-sm btn-secondary" onclick="window._curRtExp=null;PCR_STATE.rtCurrentSamples=[];PCR_STATE.rtStripMap=[];renderPcrRt()"><i class="ti ti-x"></i></button>
@@ -722,18 +1344,12 @@ function renderPcrRt() {
             <div style="font-size:12px;margin-bottom:8px;color:#888;" id="rtRunDesc">总量:${exp.tot_vol||'-'}μl, 目标:${exp.req_ng||'-'}ng</div>
             ${ (() => {
                 let p = PCR_STATE.rtProtocols.find(x => x.id === exp.protocol_id);
-                if(!p || !p.steps || p.steps.length === 0) return '';
-                let checks = PCR_STATE.activeRtStepsCheck || [];
-                let stepsHtml = p.steps.map((s, i) => `
-                    <label class="step-item ${checks[i] ? 'checked' : ''}" id="rtStepItem_${i}">
-                        <input type="checkbox" class="step-checkbox" ${checks[i] ? 'checked' : ''} onchange="toggleRtStep(${i}, this.checked)">
-                        <div><b>Step ${i + 1}.</b> ${s}</div>
-                    </label>`).join('');
-                return `<details style="margin: 8px 0; background: var(--surface-hover); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);"><summary style="cursor:pointer; font-weight:600; font-size:13px; color:var(--text-secondary);"><i class="ti ti-info-circle"></i> 实验步骤提示 / Protocol Steps</summary><div class="step-list" style="margin-top:8px;">${stepsHtml}</div></details>`;
+                let steps = p && p.steps && p.steps.length ? p.steps : pcrDefaultSteps('rt');
+                return pcrBuildStepChecklist(steps, PCR_STATE.activeRtStepsCheck || [], 'rtStep', 'toggleRtStep', '实验流程步骤', pcrNormalizeStepTimers(exp.step_timers || p?.step_timers, steps.length));
             })() }
             <div class="rt-table-wrapper">
                 <table class="rt-table">
-                    <thead><tr><th>样本</th><th>管孔</th><th>浓度(ng/µL)</th><th>260/280</th><th>RNA(µL)</th><th>酶(µL)</th><th>H2O(µL)</th><th>操作</th></tr></thead>
+                    <thead><tr><th>操作</th><th>代号</th><th>样本</th><th>管孔</th><th>浓度(ng/µL)</th><th>260/280</th><th>RNA(µL)</th><th>酶(µL)</th><th>H2O(µL)</th></tr></thead>
                     <tbody id="rtTableBody"></tbody>
                 </table>
             </div>
@@ -745,7 +1361,7 @@ function renderPcrRt() {
 
     c.innerHTML = `
         ${hasExp ? workHtml : `<div class="card" style="margin-top:8px;">
-            <button class="btn btn-primary btn-block" ${noReady ? 'disabled title="' + disabledMsg + '"' : ''} onclick="_startNewRt()"><i class="ti ti-player-play"></i> 开始新逆转录实验</button>
+            <button class="btn btn-primary btn-block" ${noReady ? 'disabled title="' + disabledMsg + '"' : ''} onclick="_startNewRt()"><i class="ti ti-player-play"></i> 启动逆转录实验</button>
         </div>`}
         <div class="divider"></div>
         <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
@@ -758,16 +1374,18 @@ window._startNewRt = function () {
     let rna = PCR_STATE.rnaLogs[0];
     let p = PCR_STATE.rtProtocols[0];
     if (!rna || !p) return;
-    PCR_STATE.activeRtStepsCheck = new Array((p.steps || []).length).fill(false);
+    let steps = p.steps && p.steps.length ? p.steps : pcrDefaultSteps('rt');
+    PCR_STATE.activeRtStepsCheck = new Array(steps.length).fill(false);
     PCR_STATE.rtCurrentSamples = rna.samples.map(s => {
         let nm = s.name ? s.name : s;
-        return { original: s.original || nm, name: nm, group: s.group || '-', day: s.day || '-', tube: '-', conc: '', ratio: '', rna_vol: 0, enzyme_vol: p.enzyme_vol, water_vol: 0 };
+        return { ...s, original: s.original || nm, name: nm, alias_code: s.alias_code || '', group: s.group || '-', day: s.day || '-', tube: '-', conc: '', ratio: '', rna_vol: 0, enzyme_vol: p.enzyme_vol, water_vol: 0 };
     });
+    pcrAssignSampleAliases(PCR_STATE.rtCurrentSamples);
     let ts = Math.ceil(PCR_STATE.rtCurrentSamples.length / 8) || 1;
     PCR_STATE.rtStripMap = Array.from({ length: ts }, (_, i) => Array.from({ length: 8 }, (_, j) => { let v = i * 8 + j; return v < PCR_STATE.rtCurrentSamples.length ? v : null; }));
-    window._curRtExp = { name: '', rna_log_id: rna.id, rna_source_name: rna.name, protocol_id: p.id, req_ng: p.required_rna_ng || p.rna_vol, tot_vol: p.total_vol, enz_vol: p.enzyme_vol, status: '中途保存' };
+    window._curRtExp = { name: '', rna_log_id: rna.id, rna_source_name: rna.name, protocol_id: p.id, step_timers: pcrNormalizeStepTimers(p.step_timers, steps.length), req_ng: p.required_rna_ng || p.rna_vol, tot_vol: p.total_vol, enz_vol: p.enzyme_vol, status: '中途保存' };
     renderPcrRt();
-    autoSaveExp('rt', true);
+    pcrAutoSaveRtContext(true);
 }
 
 window._onRtRnaChange = function () {
@@ -779,8 +1397,9 @@ window._onRtRnaChange = function () {
     let p = PCR_STATE.rtProtocols.find(x => x.id === window._curRtExp.protocol_id) || PCR_STATE.rtProtocols[0];
     PCR_STATE.rtCurrentSamples = rna.samples.map(s => {
         let nm = s.name ? s.name : s;
-        return { original: s.original || nm, name: nm, group: s.group || '-', day: s.day || '-', tube: '-', conc: '', ratio: '', rna_vol: 0, enzyme_vol: p.enzyme_vol, water_vol: 0 };
+        return { ...s, original: s.original || nm, name: nm, alias_code: s.alias_code || '', group: s.group || '-', day: s.day || '-', tube: '-', conc: '', ratio: '', rna_vol: 0, enzyme_vol: p.enzyme_vol, water_vol: 0 };
     });
+    pcrAssignSampleAliases(PCR_STATE.rtCurrentSamples);
     let ts = Math.ceil(PCR_STATE.rtCurrentSamples.length / 8) || 1;
     PCR_STATE.rtStripMap = Array.from({ length: ts }, (_, i) => Array.from({ length: 8 }, (_, j) => { let v = i * 8 + j; return v < PCR_STATE.rtCurrentSamples.length ? v : null; }));
     renderRtTable();
@@ -788,14 +1407,24 @@ window._onRtRnaChange = function () {
 
 window._onRtProtoChange = function () {
     let pId = document.getElementById('rtExpProto').value;
-    let p = PCR_STATE.rtProtocols.find(x => x.id === pId);
+    let p = pcrResolveRtProtocol(pId);
     if (!p || !window._curRtExp) return;
     window._curRtExp.protocol_id = p.id;
+    window._curRtExp.protocol_name = p.name;
+    if (window._curRnaExp) {
+        window._curRnaExp.rt_protocol_id = p.id;
+        window._curRnaExp.rt_protocol_name = p.name;
+    }
+    window._curRtExp.step_timers = pcrNormalizeStepTimers(p.step_timers, (p.steps && p.steps.length ? p.steps : pcrDefaultSteps('rt')).length);
     window._curRtExp.req_ng = p.required_rna_ng || p.rna_vol;
     window._curRtExp.tot_vol = p.total_vol;
     window._curRtExp.enz_vol = p.enzyme_vol;
+    let steps = p.steps && p.steps.length ? p.steps : pcrDefaultSteps('rt');
+    PCR_STATE.activeRtStepsCheck = new Array(steps.length).fill(false);
     PCR_STATE.rtCurrentSamples.forEach((s, i) => { s.enzyme_vol = p.enzyme_vol; if (s.conc) calcRtSample(i, s.conc); });
-    renderPcrRt();
+    if (window._curRnaExp) renderPcrRna();
+    else renderPcrRt();
+    pcrAutoSaveRtContext();
 }
 
 window.saveRtProtocol = async function () {
@@ -803,11 +1432,13 @@ window.saveRtProtocol = async function () {
     let total = parseFloat(document.getElementById('rtPTotal').value) || 20;
     let enz = parseFloat(document.getElementById('rtPEnz').value) || 4;
     let rna = parseFloat(document.getElementById('rtPRna').value) || 1000;
-    let stepsVal = document.getElementById('rtPSteps') ? document.getElementById('rtPSteps').value : '';
-    let stepsArr = stepsVal.split('\n').map(x => x.trim()).filter(x => x);
-    if (!name) return showToast("请填写方案名称", "error");
-    let payload = { name, total_vol: total, enzyme_vol: enz, rna_vol: rna, steps: stepsArr };
+    let stepsArr = typeof protocolReadSteps === 'function'
+        ? protocolReadSteps('rtPSteps')
+        : (document.getElementById('rtPSteps')?.value || '').split('\n').map(x => x.trim()).filter(x => x);
+    if (!name) return showToast("需填写方案名称", "error");
+    let payload = { name, total_vol: total, enzyme_vol: enz, rna_vol: rna, steps: stepsArr, step_timers: typeof protocolReadStepTimers === 'function' ? protocolReadStepTimers('rtPSteps') : [] };
     if (window._currentEditingRtProtoId) { payload.id = window._currentEditingRtProtoId; window._currentEditingRtProtoId = null; }
+    if (typeof protocolFinishSave === 'function') await protocolFinishSave();
     await savePcrItem('rt', 'protocols', payload);
 }
 
@@ -819,15 +1450,18 @@ window.editRtP = function (id) {
     document.getElementById('rtPTotal').value = p.total_vol;
     document.getElementById('rtPEnz').value = p.enzyme_vol;
     document.getElementById('rtPRna').value = p.rna_vol;
-    if(document.getElementById('rtPSteps')) document.getElementById('rtPSteps').value = (p.steps || []).join('\n');
+    if (typeof protocolSetSteps === 'function' && protocolSetSteps('rtPSteps', p.steps || [], p.step_timers || [])) {}
+    else if(document.getElementById('rtPSteps')) document.getElementById('rtPSteps').value = (p.steps || []).join('\n');
     document.getElementById('rtPName').scrollIntoView({ behavior: 'smooth' });
 }
 
-window.finishRtExperiment = function () {
-    if (!window._curRtExp.name) return showToast("请填写实验名称", "error");
+window.finishRtExperiment = async function () {
+    if (!window._curRtExp.name) return showToast("需填写实验名称", "error");
     window._curRtExp.status = "已完成";
     window._curRtExp.activeCheck = PCR_STATE.activeRtStepsCheck;
-    autoSaveExp('rt', true);
+    let exp = window._curRtExp;
+    await pcrAutoSaveRtContext(true);
+    await pcrUpsertCdnaSamples(exp);
     let existing = PCR_STATE.rtLogs.find(l => l.id === window._curRtExp.id);
     if (existing) existing.status = '已完成';
     window._curRtExp = null;
@@ -845,14 +1479,15 @@ function renderRtTable() {
 
     document.getElementById('rtTableBody').innerHTML = PCR_STATE.rtCurrentSamples.map((s, idx) => `
         <tr id="rtRow_${idx}">
-            <td style="font-weight:bold">${s.name}</td>
+            <td><button class="btn btn-sm btn-danger" style="padding:2px 6px;" onclick="deleteRtSample(${idx})" title="从此实验中剔除该样本"><i class="ti ti-trash"></i></button></td>
+            <td><input class="rt-input sample-code-input" value="${pcrSampleLabel(s, idx)}" onchange="PCR_STATE.rtCurrentSamples[${idx}].alias_code=this.value.trim();if(!PCR_STATE.rtCurrentSamples[${idx}].alias_code)pcrAssignSampleAliases(PCR_STATE.rtCurrentSamples,'PN');renderRtStrips();pcrAutoSaveRtContext()"></td>
+            <td style="font-weight:400;font-size:11px;line-height:1.25;max-width:120px;white-space:normal;word-break:break-word;">${s.name}</td>
             <td style="color:#666;font-size:12px;" class="tube-lbl">${s.tube}</td>
             <td><input type="number" class="rt-input" placeholder="0.0" value="${s.conc}" oninput="calcRtSample(${idx},this.value,'conc')"></td>
-            <td><input type="number" class="rt-input" placeholder="1.8" value="${s.ratio}" oninput="PCR_STATE.rtCurrentSamples[${idx}].ratio=this.value; autoSaveExp('rt');"></td>
+            <td><input type="number" class="rt-input" placeholder="1.8" value="${s.ratio}" oninput="PCR_STATE.rtCurrentSamples[${idx}].ratio=this.value; pcrAutoSaveRtContext();"></td>
             <td class="rna-vol" style="font-weight:bold;color:var(--info)">${s.rna_vol > 0 ? Number(s.rna_vol).toFixed(2) : '-'}</td>
             <td>${s.enzyme_vol}</td>
             <td class="water-vol ${s.water_vol < 0 ? 'error' : ''}" style="font-weight:bold;color:${s.water_vol < 0 ? 'var(--danger)' : 'var(--success)'}">${s.conc ? Number(s.water_vol).toFixed(2) : '-'}</td>
-            <td><button class="btn btn-sm btn-danger" style="padding:2px 6px;" onclick="deleteRtSample(${idx})" title="从此实验中剔除该样本"><i class="ti ti-trash"></i></button></td>
         </tr>
     `).join('');
 
@@ -861,11 +1496,15 @@ function renderRtTable() {
 
 window.deleteRtSample = function (idx) {
     if (!confirm(`确定要从本轮逆转录(RT)中剔除样本 ${PCR_STATE.rtCurrentSamples[idx].name} 吗？`)) return;
+    if (window._curRnaExp && Array.isArray(window._curRnaExp.samples)) {
+        window._curRnaExp.samples.splice(idx, 1);
+    }
     PCR_STATE.rtCurrentSamples.splice(idx, 1);
     let ts = Math.ceil(PCR_STATE.rtCurrentSamples.length / 8) || 1;
     PCR_STATE.rtStripMap = Array.from({ length: ts }, (_, i) => Array.from({ length: 8 }, (_, j) => { let v = i * 8 + j; return v < PCR_STATE.rtCurrentSamples.length ? v : null; }));
-    renderPcrRt();
-    autoSaveExp('rt');
+    if (window._curRnaExp) renderPcrRna();
+    else renderPcrRt();
+    pcrAutoSaveRtContext();
 }
 
 function renderRtStrips() {
@@ -875,13 +1514,13 @@ function renderRtStrips() {
         sh += `<div class="strip-wrapper"><div style="font-size:10px;text-align:center;color:#888;margin-bottom:2px">管 ${i + 1}</div><div class="strip-8">`;
         s.forEach((sx, j) => {
             let smp = (sx !== null) ? PCR_STATE.rtCurrentSamples[sx] : null;
-            let c = smp ? smp.name.substring(0, 3) : (sx !== null ? '?' : ''); // fallback
+            let c = smp ? pcrSampleLabel(smp, sx) : (sx !== null ? '?' : '');
             sh += `<div class="strip-tube ${smp ? 'filled' : ''}" title="${smp ? smp.name : '空'}" onclick="showRtAssign(${i},${j},this)">${c}</div>`;
         });
         sh += `</div></div>`;
     });
-    sh += `<div class="strip-wrapper" style="justify-content:center;"><div style="font-size:10px;text-align:center;color:#888;margin-bottom:2px">&nbsp;</div><div style="display:flex;flex-direction:row;gap:4px;padding:8px;align-items:center;"><button class="btn btn-sm btn-secondary" style="width:32px;height:32px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;" onclick="addRtStrip()">➕</button>`;
-    if (PCR_STATE.rtStripMap.length > 1) sh += `<button class="btn btn-sm btn-danger" style="width:32px;height:32px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;" onclick="removeRtStrip()">➖</button>`;
+    sh += `<div class="strip-wrapper" style="justify-content:center;"><div style="font-size:10px;text-align:center;color:#888;margin-bottom:2px">&nbsp;</div><div class="strip-actions"><button class="btn btn-sm btn-secondary strip-round-btn" onclick="addRtStrip()" title="添加八联管"><i class="ti ti-plus"></i></button>`;
+    if (PCR_STATE.rtStripMap.length > 1) sh += `<button class="btn btn-sm btn-danger strip-round-btn" onclick="removeRtStrip()" title="删除最后一排八联管"><i class="ti ti-minus"></i></button>`;
     sh += `</div></div>`;
     box.innerHTML = sh;
 }
@@ -902,7 +1541,7 @@ window.calcRtSample = function (idx, val) {
         wv.className = `water-vol ${s.water_vol < 0 ? 'error' : ''}`;
         wv.style.color = s.water_vol < 0 ? 'var(--danger)' : 'var(--success)';
     }
-    autoSaveExp('rt');
+    pcrAutoSaveRtContext();
 }
 
 window.showRtAssign = function (si, ti, el) {
@@ -924,10 +1563,10 @@ window.assignRtStrip = function (si, ti, stx) {
     PCR_STATE.rtStripMap[si][ti] = stx;
     let p = document.getElementById('rtAssignPop'); if (p) p.remove();
     renderRtTable(); // full render because tube labels changed
-    autoSaveExp('rt');
+    pcrAutoSaveRtContext();
 }
-window.addRtStrip = function () { PCR_STATE.rtStripMap.push(new Array(8).fill(null)); renderRtTable(); autoSaveExp('rt'); }
-window.removeRtStrip = function () { PCR_STATE.rtStripMap.pop(); renderRtTable(); autoSaveExp('rt'); }
+window.addRtStrip = function () { PCR_STATE.rtStripMap.push(new Array(8).fill(null)); renderRtTable(); pcrAutoSaveRtContext(); }
+window.removeRtStrip = function () { PCR_STATE.rtStripMap.pop(); renderRtTable(); pcrAutoSaveRtContext(); }
 
 
 
@@ -936,71 +1575,56 @@ function renderPcrQpcr() {
     let c = document.getElementById('pcrQpcr');
     if (!c) return;
     let hasExp = !!window._curQpcrExp;
-    let noReady = PCR_STATE.qpcrProtocols.length === 0 || PCR_STATE.rtLogs.length === 0;
-    let disabledMsg = PCR_STATE.qpcrProtocols.length === 0 ? '请先建立 qPCR 方案' : (PCR_STATE.rtLogs.length === 0 ? '请先完成 RT 实验' : '');
+    let noReady = PCR_STATE.cdnaSamples.length === 0;
+    let disabledMsg = PCR_STATE.cdnaSamples.length === 0 ? '需先完成 PCR提取/逆转录并生成 cDNA 样本' : '';
 
     let workHtml = '';
     if (hasExp) {
         let exp = window._curQpcrExp;
-        let protoOptions = PCR_STATE.qpcrProtocols.map(p => `<option value="${p.id}" ${p.id === exp.protocol_id ? 'selected' : ''}>${p.name} (${p.well_vol}ul体系)</option>`).join('');
-        let rtLogOptions = PCR_STATE.rtLogs.map(l => `<option value="${l.id}" ${l.id === exp.rt_log_id ? 'selected' : ''}>${l.name}</option>`).join('');
+        let protocols = PCR_STATE.qpcrProtocols.length ? PCR_STATE.qpcrProtocols : [{ id: '', name: '默认 qPCR 体系', well_vol: 10, sybr_vol: 5, primer_vol: 1, cdna_vol: 1, steps: pcrDefaultSteps('qpcr') }];
+        let protoOptions = protocols.map(p => `<option value="${p.id}" ${p.id === exp.protocol_id ? 'selected' : ''}>${p.name} (${p.well_vol || 10}μL体系)</option>`).join('');
         let genesStr = (exp.genes || PCR_STATE.qpcrGenes || []).join(', ');
         let geneSelectOpts = '<option value="">选择基因</option>' + (PCR_STATE.qpcrGenes || []).map(g => `<option>${g}</option>`).join('');
-        let sampleSelectOpts = '<option value="">选择样本</option>' + (PCR_STATE.qpcrSamples || []).map(s => `<option value="${s.name || s}">${s.name || s}</option>`).join('');
+        let sampleSelectOpts = '<option value="">选择样本</option>' + (PCR_STATE.qpcrSamples || []).map((s, idx) => `<option value="${s.name || s}">${pcrSampleLabel(s, idx)} · ${s.name || s}</option>`).join('');
 
         // Build FC/CT section
         let hkOpts = (PCR_STATE.qpcrGenes || []).map(g => `<option value="${g}" ${exp.hk_gene === g ? 'selected' : ''}>${g}</option>`).join('');
 
         workHtml = `
-        <div class="card" style="margin-top:8px;">
+        <div class="card workflow-panel" style="margin-top:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                 <div style="font-weight:700;font-size:15px;"><i class="ti ti-chart-line" style="color:var(--primary)"></i> qPCR 荧光定量实验</div>
-                <button class="btn btn-sm btn-secondary" onclick="window._curQpcrExp=null;PCR_STATE.qpcrGenes=[];PCR_STATE.qpcrSamples=[];PCR_STATE.qpcrPlateMap={};PCR_STATE.qpcrSelectedWells=new Set();renderPcrQpcr()"><i class="ti ti-x"></i></button>
+                <button class="btn btn-sm btn-secondary" onclick="window._curQpcrExp=null;PCR_STATE.qpcrGenes=[];PCR_STATE.qpcrSamples=[];PCR_STATE.qpcrAllSamples=[];PCR_STATE.qpcrPlateMap={};PCR_STATE.qpcrSelectedWells=new Set();renderPcrQpcr()"><i class="ti ti-x"></i></button>
             </div>
             <div class="form-group"><label class="form-label">实验名称</label><input class="form-input" id="qExpName" value="${exp.name || ''}" placeholder="如：第一批qPCR" oninput="if(window._curQpcrExp)window._curQpcrExp.name=this.value"></div>
             <div class="form-row">
-                <div class="form-group"><label class="form-label">cDNA来源 (RT实验)</label><select class="form-select" id="qExpRtLog" onchange="_onQpcrRtChange()">${rtLogOptions}</select></div>
-                <div class="form-group"><label class="form-label">qPCR方案</label><select class="form-select" id="qExpProto" onchange="if(window._curQpcrExp) { window._curQpcrExp.protocol_id=this.value; renderPcrQpcr(); }">${protoOptions}</select></div>
+                <div class="form-group"><label class="form-label">cDNA样本</label><button class="btn btn-secondary btn-block" onclick="pcrOpenQpcrCdnaPicker()"><i class="ti ti-database-import"></i> 导入样本</button></div>
+                <div class="form-group"><label class="form-label">qPCR方案</label><select class="form-select" id="qExpProto" onchange="_onQpcrProtoChange()">${protoOptions}</select></div>
             </div>
-            ${ (() => {
-                let badges = (PCR_STATE.qpcrSamples || []).map((s, idx) => `
-                    <span style="display:inline-flex;align-items:center;padding:2px 8px;background:var(--surface-hover);border:1px solid var(--border);border-radius:12px;font-size:11px;margin:2px 4px 2px 0;">
-                        ${s.name || s}
-                        <i class="ti ti-x" style="cursor:pointer;margin-left:4px;color:var(--danger)" onclick="deleteQpcrSample(${idx})" title="剔除样本"></i>
-                    </span>
-                `).join('');
-                return `<div class="form-group" style="margin-bottom:8px">
-                    <label class="form-label">在库样本 (可点击 '×' 剔除无效或未配好的样本)</label>
-                    <div style="display:flex;flex-wrap:wrap;">${badges || '<span style="font-size:12px;color:#888">无样本</span>'}</div>
-                </div>`;
-            })() }
+            ${pcrRenderQpcrSampleStrips()}
             <div class="form-row">
-                <div class="form-group" style="flex:2"><label class="form-label">测试基因 (逗号分隔)</label><input class="form-input" id="qExpGenes" value="${genesStr}" placeholder="如 GAPDH, IL-6, TNF-a" onchange="_onQpcrGenesChange()"></div>
+                <div class="form-group" style="flex:2"><label class="form-label">测试基因 (逗号分隔)</label><input class="form-input" id="qExpGenes" value="${genesStr}" placeholder="GAPDH, IL-6, TNF-a" onchange="_onQpcrGenesChange()"></div>
                 <div class="form-group" style="flex:1"><label class="form-label">复孔数</label><input type="number" class="form-input" id="qExpReps" value="${exp.reps || 3}" min="1" style="width:80px;"></div>
                 <div class="form-group" style="display:flex;align-items:flex-end"><button class="btn btn-secondary" onclick="_autoAssignQpcr()" title="根据基因和样本自动排布384板"><i class="ti ti-wand"></i> 自动排布</button></div>
             </div>
             <div class="divider"></div>
             ${ (() => {
-                let p = PCR_STATE.qpcrProtocols.find(x => x.id === exp.protocol_id);
-                if(!p || !p.steps || p.steps.length === 0) return '';
-                let checks = PCR_STATE.activeQpcrStepsCheck || [];
-                let stepsHtml = p.steps.map((s, i) => `
-                    <label class="step-item ${checks[i] ? 'checked' : ''}" id="qpcrStepItem_${i}">
-                        <input type="checkbox" class="step-checkbox" ${checks[i] ? 'checked' : ''} onchange="toggleQpcrStep(${i}, this.checked)">
-                        <div><b>Step ${i + 1}.</b> ${s}</div>
-                    </label>`).join('');
-                return `<details style="margin-bottom: 12px; background: var(--surface-hover); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);"><summary style="cursor:pointer; font-weight:600; font-size:13px; color:var(--text-secondary);"><i class="ti ti-info-circle"></i> 实验步骤提示 / Protocol Steps</summary><div class="step-list" style="margin-top:8px;">${stepsHtml}</div></details>`;
+                let p = protocols.find(x => x.id === exp.protocol_id) || protocols[0];
+                let steps = p && p.steps && p.steps.length ? p.steps : pcrDefaultSteps('qpcr');
+                return pcrBuildStepChecklist(steps, PCR_STATE.activeQpcrStepsCheck || [], 'qpcrStep', 'toggleQpcrStep', '实验流程步骤', pcrNormalizeStepTimers(exp.step_timers || p?.step_timers, steps.length));
             })() }
             <div class="qpcr-toolbar">
-                <div style="font-size:12px;font-weight:600;width:100%"><i class="ti ti-palette"></i> 涂色模式 (手动框选孔位后选择基因/样本)</div>
-                <select class="form-select" style="width:120px;" id="qPaintGene">${geneSelectOpts}</select>
-                <select class="form-select" style="width:120px;" id="qPaintSample">${sampleSelectOpts}</select>
-                <button class="btn btn-sm btn-secondary" onclick="applyPaint()"><i class="ti ti-circle-check"></i> 应用</button>
-                <button class="btn btn-sm btn-secondary" onclick="clearSelectedWells()"><i class="ti ti-eraser"></i> 清除</button>
+                <div class="qpcr-toolbar-title"><i class="ti ti-palette"></i> 孔位分配模式</div>
+                <div class="qpcr-paint-controls">
+                    <select class="form-select" id="qPaintGene">${geneSelectOpts}</select>
+                    <select class="form-select" id="qPaintSample">${sampleSelectOpts}</select>
+                    <button class="btn btn-sm btn-secondary" onclick="applyPaint()"><i class="ti ti-circle-check"></i> 应用</button>
+                    <button class="btn btn-sm btn-secondary" onclick="clearSelectedWells()"><i class="ti ti-eraser"></i> 清除</button>
+                </div>
             </div>
             <div id="qPlateLegend" class="color-legend"></div>
             <div class="plate-384-wrapper" id="qPlateWrapper"></div>
-            <button class="btn btn-secondary btn-block" onclick="saveQpcrDraft()"><i class="ti ti-device-floppy"></i> 暂存板布局</button>
+            <button class="btn btn-secondary btn-block" onclick="saveQpcrDraft()"><i class="ti ti-device-floppy"></i> 暂存进度</button>
 
             <div class="divider"></div>
             <div class="section-title"><i class="ti ti-chart-area-line"></i> FC 数据分析</div>
@@ -1015,7 +1639,7 @@ function renderPcrQpcr() {
 
     c.innerHTML = `
         ${hasExp ? workHtml : `<div class="card" style="margin-top:8px;">
-            <button class="btn btn-primary btn-block" ${noReady ? 'disabled title="' + disabledMsg + '"' : ''} onclick="_startNewQpcr()"><i class="ti ti-player-play"></i> 开始新 qPCR 实验</button>
+            <button class="btn btn-primary btn-block" ${noReady ? 'disabled title="' + disabledMsg + '"' : ''} onclick="_startNewQpcr()"><i class="ti ti-player-play"></i> 启动 qPCR 实验</button>
         </div>`}
         <div class="divider"></div>
         <div class="section-title"><i class="ti ti-history"></i> 历史记录</div>
@@ -1029,42 +1653,81 @@ function renderPcrQpcr() {
 }
 
 window._startNewQpcr = function () {
-    let rt = PCR_STATE.rtLogs[0];
-    let p = PCR_STATE.qpcrProtocols[0];
-    if (!rt || !p) return;
-    PCR_STATE.activeQpcrStepsCheck = new Array((p.steps || []).length).fill(false);
-    let smps = rt.samples.map(s => ({ name: s.name || s, original: s.original || s.name || s, group: s.group || '-', day: s.day || '-' }));
+    if (PCR_STATE.cdnaSamples.length === 0) return showToast('需先完成 PCR提取/逆转录并生成 cDNA 样本', 'warning');
+    let p = PCR_STATE.qpcrProtocols[0] || { id: '', name: '默认 qPCR 体系', steps: pcrDefaultSteps('qpcr'), well_vol: 10, sybr_vol: 5, primer_vol: 1, cdna_vol: 1 };
+    let steps = p.steps && p.steps.length ? p.steps : pcrDefaultSteps('qpcr');
+    PCR_STATE.activeQpcrStepsCheck = new Array(steps.length).fill(false);
     PCR_STATE.qpcrGenes = [];
-    PCR_STATE.qpcrSamples = smps;
     PCR_STATE.qpcrPlateMap = {};
     PCR_STATE.qpcrSelectedWells = new Set();
-    window._curQpcrExp = { name: '', rt_log_id: rt.id, rt_source_name: rt.name, protocol_id: p.id, genes: [], reps: 3, status: '中途保存' };
+    window._curQpcrExp = { name: '', protocol_id: p.id, step_timers: pcrNormalizeStepTimers(p.step_timers, steps.length), genes: [], reps: 3, status: '中途保存', cdna_sample_ids: [], cdna_groups: [] };
+    pcrSetQpcrSourceSamples(PCR_STATE.cdnaSamples || []);
     renderPcrQpcr();
     autoSaveExp('qpcr', true);
 }
 
-window._onQpcrRtChange = function () {
-    let rtId = document.getElementById('qExpRtLog').value;
-    let rt = PCR_STATE.rtLogs.find(l => l.id === rtId);
-    if (!rt || !window._curQpcrExp) return;
-    window._curQpcrExp.rt_log_id = rt.id;
-    window._curQpcrExp.rt_source_name = rt.name;
-    PCR_STATE.qpcrSamples = rt.samples.map(s => ({ name: s.name || s, original: s.original || s.name || s, group: s.group || '-', day: s.day || '-' }));
+window._onQpcrProtoChange = function() {
+    if (!window._curQpcrExp) return;
+    let protocolId = document.getElementById('qExpProto').value;
+    let protocol = pcrResolveQpcrProtocol(protocolId);
+    let steps = protocol.steps && protocol.steps.length ? protocol.steps : pcrDefaultSteps('qpcr');
+    window._curQpcrExp.protocol_id = protocol.id;
+    window._curQpcrExp.step_timers = pcrNormalizeStepTimers(protocol.step_timers, steps.length);
+    PCR_STATE.activeQpcrStepsCheck = new Array(steps.length).fill(false);
     renderPcrQpcr();
+    autoSaveExp('qpcr');
+};
+
+window._onQpcrRtChange = function () {
+    pcrOpenQpcrCdnaPicker();
 }
+
+window.pcrOpenQpcrCdnaPicker = function() {
+    if (!window._curQpcrExp) return;
+    if (typeof wfOpenSampleGroupPicker !== 'function') return showToast('样本组选择器未加载', 'error');
+    wfOpenSampleGroupPicker({
+        title: '导入样本',
+        samples: PCR_STATE.cdnaSamples || [],
+        allowMultiGroup: true,
+        aliasPrefix: 'PQ',
+        emptyText: '样本库中还没有 cDNA 样本',
+        onImport(selected, groups) {
+            let selectedRows = selected.map(sample => ({
+                ...sample,
+                name: sample.original_sample_name || sample.name || sample.display_name,
+                alias_code: '',
+                run_alias_code: '',
+                sample_id: sample.id,
+                cdna_sample_id: sample.id,
+                group: sample.group || '-',
+                day: sample.duration || sample.intervention_duration || '-',
+                induction_scheme: sample.induction_scheme || sample.intervention_scheme || '',
+                source_experiment_name: sample.pcr_extract_name || sample.collection_name || '',
+                source_tube_label: sample.tube_label || '',
+                source_tube_index: Number(sample.strip_index || 0),
+                source_tube_position: sample.tube_position || '',
+                tube_index: Number(sample.tube_index || 0),
+                pcr_extract_id: sample.pcr_extract_id || sample.collection_id || ''
+            }));
+            window._curQpcrExp.cdna_sample_ids = selectedRows.map(sample => sample.cdna_sample_id || sample.sample_id).filter(Boolean);
+            window._curQpcrExp.cdna_groups = (Array.isArray(groups) ? groups : [groups]).filter(Boolean).map(group => ({ id: group.id, name: group.name }));
+            window._curQpcrExp.cdna_source_names = [...new Set(selectedRows.map(sample => sample.source_experiment_name).filter(Boolean))];
+            PCR_STATE.qpcrPlateMap = {};
+            PCR_STATE.qpcrSelectedWells = new Set();
+            pcrSetQpcrSourceSamples(selectedRows);
+            renderPcrQpcr();
+            autoSaveExp('qpcr');
+        }
+    });
+};
 
 window.deleteQpcrSample = function (idx) {
     let smp = PCR_STATE.qpcrSamples[idx];
     if (!confirm(`确定要在本次 qPCR 中剔除样本 ${smp.name || smp} 吗？\n(这也会将已画在其孔位上的该样本清空)`)) return;
-    PCR_STATE.qpcrSamples.splice(idx, 1);
-    Object.keys(PCR_STATE.qpcrPlateMap).forEach(k => {
-        let v = PCR_STATE.qpcrPlateMap[k];
-        if (v.sample === (smp.name || smp)) {
-            delete v.sample;
-            delete v.sampleObj;
-            if (!v.gene) delete PCR_STATE.qpcrPlateMap[k];
-        }
-    });
+    let selected = new Set(PCR_STATE.qpcrSamples.map((sample, index) => pcrSampleKey(sample, index)));
+    selected.delete(pcrSampleKey(smp, idx));
+    pcrRemoveQpcrSampleFromPlate(smp);
+    pcrSetQpcrSourceSamples(PCR_STATE.qpcrAllSamples.length ? PCR_STATE.qpcrAllSamples : PCR_STATE.qpcrSamples, selected);
     renderPcrQpcr();
     autoSaveExp('qpcr');
 }
@@ -1088,12 +1751,13 @@ window._onQpcrGenesChange = function () {
 window._autoAssignQpcr = function () {
     let genesStr = document.getElementById('qExpGenes').value;
     let genes = genesStr.split(/[,，\s]+/).map(g => g.trim()).filter(g => g);
-    if (genes.length === 0) return showToast("请先输入基因", "warning");
+    if (genes.length === 0) return showToast("需输入基因", "warning");
     let reps = parseInt(document.getElementById('qExpReps').value) || 3;
     PCR_STATE.qpcrGenes = genes;
     if (window._curQpcrExp) { window._curQpcrExp.genes = genes; window._curQpcrExp.reps = reps; }
     PCR_STATE.qpcrPlateMap = {};
     let smps = PCR_STATE.qpcrSamples;
+    if (!smps.length) return showToast("需先选择至少一个 cDNA 样本", "warning");
     let lts = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"];
     let cr = 0, cc = 1;
     for (let g of genes) {
@@ -1130,7 +1794,7 @@ function renderQpcrPlate() {
         for (let c = 1; c <= 24; c++) {
             let wid = lts[r] + c; let info = PCR_STATE.qpcrPlateMap[wid]; let sld = PCR_STATE.qpcrSelectedWells.has(wid);
             let bg = 'var(--surface)', t = '', tt = wid;
-            if (info && info.gene) { let gi = genes.indexOf(info.gene); bg = gi !== -1 ? getColor(gi) : '#cacaca'; t = info.sample ? info.sample.substring(0, 2) : ''; tt = `${wid}: ${info.sample} (${info.gene})`; }
+            if (info && info.gene) { let gi = genes.indexOf(info.gene); bg = gi !== -1 ? getColor(gi) : '#cacaca'; t = info.sampleObj ? pcrSampleLabel(info.sampleObj, 0) : (info.sample ? info.sample.substring(0, 2) : ''); tt = `${wid}: ${info.sampleObj?.alias_code || ''} ${info.sample || ''} (${info.gene})`; }
             html += `<td class="plate-384-cell ${sld ? 'selected' : ''}" id="well_${wid}" data-row="${r}" data-col="${c-1}" style="background:${bg};" title="${tt}" onmousedown="qBoxStart(event, ${r}, ${c-1})" onmouseenter="qBoxMove(${r}, ${c-1})" ontouchstart="qBoxStart(event, ${r}, ${c-1})"><div class="plate-384-cell-content" style="color:${info ? '#fff' : 'var(--text-secondary)'}; pointer-events:none;">${t}</div></td>`;
         }
         html += '</tr>';
@@ -1225,14 +1889,16 @@ window.applyPaint = function () {
 window.clearSelectedWells = function () { PCR_STATE.qpcrSelectedWells.forEach(wid => delete PCR_STATE.qpcrPlateMap[wid]); PCR_STATE.qpcrSelectedWells.clear(); renderQpcrPlate(); autoSaveExp('qpcr'); if (typeof renderQpcrMasterMix === 'function') renderQpcrMasterMix(); if (typeof renderQpcrAnalysis === 'function') renderQpcrAnalysis(); }
 window.saveQpcrDraft = function () {
     if (!window._curQpcrExp) return;
-    if (!window._curQpcrExp.name) return showToast('请填写实验名称', 'error');
+    if (!window._curQpcrExp.name) return showToast('需填写实验名称', 'error');
     window._curQpcrExp.status = "未计算FC";
     window._curQpcrExp.plate_map = PCR_STATE.qpcrPlateMap;
     window._curQpcrExp.samples = PCR_STATE.qpcrSamples;
+    window._curQpcrExp.all_samples = PCR_STATE.qpcrAllSamples;
     window._curQpcrExp.genes = PCR_STATE.qpcrGenes;
+    window._curQpcrExp.step_timers = pcrNormalizeStepTimers(window._curQpcrExp.step_timers || pcrResolveQpcrProtocol(window._curQpcrExp.protocol_id || '').step_timers, PCR_STATE.activeQpcrStepsCheck.length);
     window._curQpcrExp.activeCheck = PCR_STATE.activeQpcrStepsCheck;
     autoSaveExp('qpcr', true);
-    showToast('板布局暂存成功，步骤已存档');
+    showToast('进度已暂存');
 }
 
 window.saveQpcrProtocol = async function () {
@@ -1241,11 +1907,13 @@ window.saveQpcrProtocol = async function () {
     let sybr = parseFloat(document.getElementById('qPSybr').value) || 5;
     let primer = parseFloat(document.getElementById('qPPrimer').value) || 1;
     let cdna = parseFloat(document.getElementById('qPCdna').value) || 1;
-    let stepsVal = document.getElementById('qPSteps') ? document.getElementById('qPSteps').value : '';
-    let stepsArr = stepsVal.split('\n').map(x => x.trim()).filter(x => x);
+    let stepsArr = typeof protocolReadSteps === 'function'
+        ? protocolReadSteps('qPSteps')
+        : (document.getElementById('qPSteps')?.value || '').split('\n').map(x => x.trim()).filter(x => x);
     if (!name || !tv) return showToast("信息不完整", "error");
-    let payload = { name, well_vol: tv, sybr_vol: sybr, primer_vol: primer, cdna_vol: cdna, steps: stepsArr };
+    let payload = { name, well_vol: tv, sybr_vol: sybr, primer_vol: primer, cdna_vol: cdna, steps: stepsArr, step_timers: typeof protocolReadStepTimers === 'function' ? protocolReadStepTimers('qPSteps') : [] };
     if (window._currentEditingQpcrProtoId) { payload.id = window._currentEditingQpcrProtoId; window._currentEditingQpcrProtoId = null; }
+    if (typeof protocolFinishSave === 'function') await protocolFinishSave();
     await savePcrItem('qpcr', 'protocols', payload);
 }
 
@@ -1258,167 +1926,9 @@ window.editQpcrP = function (id) {
     document.getElementById('qPSybr').value = p.sybr_vol;
     document.getElementById('qPPrimer').value = p.primer_vol;
     document.getElementById('qPCdna').value = p.cdna_vol;
-    if(document.getElementById('qPSteps')) document.getElementById('qPSteps').value = (p.steps || []).join('\n');
+    if (typeof protocolSetSteps === 'function' && protocolSetSteps('qPSteps', p.steps || [], p.step_timers || [])) {}
+    else if(document.getElementById('qPSteps')) document.getElementById('qPSteps').value = (p.steps || []).join('\n');
     document.getElementById('qPName').scrollIntoView({ behavior: 'smooth' });
-}
-
-// ---- FC table & calculation ----
-window.generateFcTable = function () {
-    let area = document.getElementById('qFcTableArea');
-    if (!area) return;
-    let genes = PCR_STATE.qpcrGenes || [];
-    let pm = PCR_STATE.qpcrPlateMap || {};
-    if (genes.length === 0 || Object.keys(pm).length === 0) { area.innerHTML = ''; return; }
-    // Build unique sample-gene combos from plate
-    let combos = {};
-    for (let wid in pm) {
-        let w = pm[wid]; if (!w.gene || !w.sample) continue;
-        let key = w.gene + '||' + w.sample;
-        if (!combos[key]) combos[key] = { gene: w.gene, sample: w.sample, sampleObj: w.sampleObj, cts: [] };
-        combos[key].cts.push(w.ct || '');
-    }
-    // Load saved CT values from exp
-    let savedCt = (window._curQpcrExp && window._curQpcrExp.ct_data) || {};
-    // Table header = genes, rows = samples
-    let sampleNames = [...new Set(Object.values(pm).filter(w => w.sample).map(w => w.sample))];
-    let html = '<div class="rt-table-wrapper"><table class="rt-table"><thead><tr><th>样本</th>';
-    genes.forEach(g => { html += `<th>${g}</th>`; });
-    html += '</tr></thead><tbody>';
-    sampleNames.forEach(s => {
-        html += `<tr><td style="font-weight:bold">${s}</td>`;
-        genes.forEach(g => {
-            let key = g + '||' + s;
-            let saved = savedCt[key] || '';
-            html += `<td><input type="number" class="rt-input" step="0.01" placeholder="CT" value="${saved}" oninput="_updateCtVal('${g}','${s}',this.value)"></td>`;
-        });
-        html += '</tr>';
-    });
-    html += '</tbody></table></div>';
-    area.innerHTML = html;
-}
-
-window._updateCtVal = function (gene, sample, val) {
-    if (!window._curQpcrExp) return;
-    if (!window._curQpcrExp.ct_data) window._curQpcrExp.ct_data = {};
-    window._curQpcrExp.ct_data[gene + '||' + sample] = parseFloat(val) || '';
-    autoSaveExp('qpcr');
-}
-
-window.calculateAndPlotFC = function () {
-    let exp = window._curQpcrExp;
-    if (!exp) return;
-    let hkGene = document.getElementById('qHkGene');
-    let hkg = hkGene ? hkGene.value : '';
-    if (!hkg) return showToast('请选择内参基因', 'error');
-    let ct = exp.ct_data || {};
-    let genes = PCR_STATE.qpcrGenes.filter(g => g !== hkg);
-    let pm = PCR_STATE.qpcrPlateMap || {};
-    let sampleNames = [...new Set(Object.values(pm).filter(w => w.sample).map(w => w.sample))];
-    // Get sample info for grouping
-    let sampleInfo = {};
-    for (let wid in pm) { let w = pm[wid]; if (w.sample && w.sampleObj) sampleInfo[w.sample] = w.sampleObj; }
-    // Calculate delta-delta CT
-    // delta CT = CT_target - CT_hkg for each sample
-    let deltaCt = {};
-    sampleNames.forEach(s => {
-        let hkVal = ct[hkg + '||' + s];
-        if (!hkVal && hkVal !== 0) return;
-        deltaCt[s] = {};
-        genes.forEach(g => {
-            let tVal = ct[g + '||' + s];
-            if (tVal || tVal === 0) deltaCt[s][g] = tVal - hkVal;
-        });
-    });
-    // Group by day and group
-    let groups = {}; let days = new Set();
-    sampleNames.forEach(s => {
-        let info = sampleInfo[s] || { group: '对照组', day: '-' };
-        let groupName = info.group || '对照组';
-        let day = info.day || '-';
-        days.add(day);
-        if (!groups[groupName]) groups[groupName] = {};
-        if (!groups[groupName][day]) groups[groupName][day] = {};
-        genes.forEach(g => {
-            if (deltaCt[s] && (deltaCt[s][g] || deltaCt[s][g] === 0)) {
-                if (!groups[groupName][day][g]) groups[groupName][day][g] = [];
-                groups[groupName][day][g].push(deltaCt[s][g]);
-            }
-        });
-    });
-    let daysList = [...days].sort();
-    // Find control group (first group or group with 'control'/'对照' in name)
-    let groupNames = Object.keys(groups);
-    let ctrlName = groupNames.find(n => /control|对照|ctrl/i.test(n)) || groupNames[0];
-    // FC calculation: 2^(-(deltaCt_treatment - avg_deltaCt_control))
-    let fcResults = {};
-    genes.forEach(g => {
-        fcResults[g] = {};
-        groupNames.forEach(grp => {
-            fcResults[g][grp] = {};
-            daysList.forEach(d => {
-                let ctrlDeltaArr = (groups[ctrlName] && groups[ctrlName][d] && groups[ctrlName][d][g]) || [];
-                let ctrlAvg = ctrlDeltaArr.length > 0 ? ctrlDeltaArr.reduce((a, b) => a + b, 0) / ctrlDeltaArr.length : null;
-                let treatArr = (groups[grp] && groups[grp][d] && groups[grp][d][g]) || [];
-                if (ctrlAvg !== null && treatArr.length > 0) {
-                    let fcs = treatArr.map(v => Math.pow(2, -(v - ctrlAvg)));
-                    fcResults[g][grp][d] = { avg: fcs.reduce((a, b) => a + b, 0) / fcs.length, values: fcs };
-                }
-            });
-        });
-    });
-    // Save results
-    exp.hk_gene = hkg;
-    exp.fc_results = fcResults;
-    exp.status = '已计算FC';
-    exp.activeCheck = PCR_STATE.activeQpcrStepsCheck;
-    autoSaveExp('qpcr', true);
-    // Render FC results as tables and log
-    let chartArea = document.getElementById('qFcChartArea');
-    if (!chartArea) return;
-    let html = '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">✅ FC 计算完成 (内参: ' + hkg + ', 对照组: ' + ctrlName + ')</div>';
-    genes.forEach(g => {
-        html += `<div class="section-title" style="margin-top:12px;"><b>${g}</b> - 以同时间点 ${ctrlName} 为基准</div>`;
-        html += '<div class="rt-table-wrapper"><table class="rt-table"><thead><tr><th>组/时间</th>';
-        daysList.forEach(d => { html += `<th>${d}</th>`; });
-        html += '</tr></thead><tbody>';
-        groupNames.forEach(grp => {
-            html += `<tr><td style="font-weight:bold">${grp}</td>`;
-            daysList.forEach(d => {
-                let r = fcResults[g][grp] && fcResults[g][grp][d];
-                html += `<td>${r ? r.avg.toFixed(3) : '-'}</td>`;
-            });
-            html += '</tr>';
-        });
-        html += '</tbody></table></div>';
-    });
-    // Check for D0 and render fold-over-D0
-    let hasD0 = daysList.some(d => /^0|^d0|^D0/i.test(d));
-    if (hasD0) {
-        let d0Key = daysList.find(d => /^0|^d0|^D0/i.test(d));
-        html += '<div class="divider"></div><div class="section-title">📈 以 D0 为基准的倍数变化</div>';
-        genes.forEach(g => {
-            html += `<div style="font-weight:600;margin:8px 0 4px;">${g}</div>`;
-            html += '<div class="rt-table-wrapper"><table class="rt-table"><thead><tr><th>组/时间</th>';
-            daysList.forEach(d => { html += `<th>${d}</th>`; });
-            html += '</tr></thead><tbody>';
-            groupNames.forEach(grp => {
-                let d0r = fcResults[g][grp] && fcResults[g][grp][d0Key];
-                let d0Avg = d0r ? d0r.avg : null;
-                html += `<tr><td style="font-weight:bold">${grp}</td>`;
-                daysList.forEach(d => {
-                    let r = fcResults[g][grp] && fcResults[g][grp][d];
-                    let val = (r && d0Avg) ? (r.avg / d0Avg).toFixed(3) : '-';
-                    html += `<td>${val}</td>`;
-                });
-                html += '</tr>';
-            });
-            html += '</tbody></table></div>';
-        });
-    }
-    chartArea.innerHTML = html;
-    showToast('FC 计算完成');
-    // Update history to show status
-    renderPcrHistory('qpcr');
 }
 
 window.loadExpHistory = function (cat, id) {
@@ -1426,7 +1936,16 @@ window.loadExpHistory = function (cat, id) {
     let exp = JSON.parse(JSON.stringify(log));
     if (cat === 'rna') { window._curRnaExp = exp; PCR_STATE.activeRnaStepsCheck = exp.activeCheck || []; renderPcrRna(); }
     if (cat === 'rt') { window._curRtExp = exp; PCR_STATE.rtCurrentSamples = exp.samples || []; PCR_STATE.rtStripMap = exp.stripMap || []; PCR_STATE.activeRtStepsCheck = exp.activeCheck || []; renderPcrRt(); }
-    if (cat === 'qpcr') { window._curQpcrExp = exp; PCR_STATE.qpcrPlateMap = exp.plate_map || {}; PCR_STATE.qpcrSamples = exp.samples || []; PCR_STATE.qpcrGenes = exp.genes || []; PCR_STATE.qpcrSelectedWells = new Set(); PCR_STATE.activeQpcrStepsCheck = exp.activeCheck || []; renderPcrQpcr(); }
+    if (cat === 'qpcr') {
+        window._curQpcrExp = exp;
+        PCR_STATE.qpcrPlateMap = exp.plate_map || {};
+        PCR_STATE.qpcrGenes = exp.genes || [];
+        PCR_STATE.qpcrSelectedWells = new Set();
+        PCR_STATE.activeQpcrStepsCheck = exp.activeCheck || [];
+        let selectedKeys = new Set((exp.samples || []).map((sample, index) => pcrSampleKey(sample, index)));
+        pcrSetQpcrSourceSamples(exp.all_samples || exp.samples || [], selectedKeys);
+        renderPcrQpcr();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1437,7 +1956,7 @@ window.renderQpcrMasterMix = function () {
     if (existing) existing.remove();
 
     if (!window._curQpcrExp) return;
-    let p = PCR_STATE.qpcrProtocols.find(x => x.id === window._curQpcrExp.protocol_id);
+    let p = PCR_STATE.qpcrProtocols.find(x => x.id === window._curQpcrExp.protocol_id) || { well_vol: 10, sybr_vol: 5, primer_vol: 1, cdna_vol: 1 };
     if (!p) return;
 
     let counts = {};
@@ -1468,7 +1987,7 @@ window.renderQpcrMasterMix = function () {
                 <div style="border-top:1px dashed var(--border); margin:4px 0;"></div>
                 总 Mix: ${(parseFloat(sybr) + parseFloat(primer) + parseFloat(water)).toFixed(1)} μL
             </div>
-            <div style="font-size:11px; color:var(--info); margin-top:6px;"><b>点板提示：</b>每孔先加Mix <b>${mix}</b> μL，再加cDNA <b>${p.cdna_vol}</b> μL</div>
+            <div style="font-size:12px; color:var(--info); margin-top:6px;"><b>加样方案：</b>每孔 Mix <b>${mix}</b> μL，cDNA <b>${p.cdna_vol}</b> μL</div>
         </div>`;
     }
     html += `</div></div>`;
@@ -1541,7 +2060,7 @@ window.generateFcTable = function () {
             <td style="font-weight:600;">${g.sample.name}</td>
             <td style="color:var(--accent); font-weight:600;">${g.gene}</td>
             <td style="font-size:11px;color:#888;">${g.wells.join(', ')}</td>
-            <td><input type="text" class="rt-input ct-input" style="width:160px; text-align:left;" id="ctInput_${idx}" placeholder="如 21.0, 21.2" value="${savedVal}" oninput="calcRowCT('${k}', ${idx})"></td>
+            <td><input type="text" class="rt-input ct-input" style="width:160px; text-align:left;" id="ctInput_${idx}" placeholder="21.0, 21.2" value="${savedVal}" oninput="calcRowCT('${k}', ${idx})"></td>
             <td id="ctMean_${idx}" style="font-weight:bold;">${meanText}</td>
             <td id="ctSd_${idx}" style="font-size:11px;color:#666;">${sdText}</td>
         </tr>`;
@@ -1739,6 +2258,7 @@ window.calculateAndPlotFC = function () {
         window._curQpcrExp.fc_results = fcResults;
         window._curQpcrExp.plate_map = PCR_STATE.qpcrPlateMap;
         window._curQpcrExp.samples = PCR_STATE.qpcrSamples;
+        window._curQpcrExp.all_samples = PCR_STATE.qpcrAllSamples;
         window._curQpcrExp.activeCheck = PCR_STATE.activeQpcrStepsCheck;
         autoSaveExp('qpcr', true);
         showToast('FC计算完成，数据及步骤状态已保存！');
