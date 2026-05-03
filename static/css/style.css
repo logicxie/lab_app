@@ -86,6 +86,7 @@
 
     --nav-height: 68px;
     --max-width: 680px;
+    --app-viewport-height: 100vh;
     --transition: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     --icon-size: 18px;
     --nav-bg: rgba(250,249,245,0.86);
@@ -698,6 +699,23 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+html.is-mobile-shell,
+html.is-mobile-shell body {
+    min-height: var(--app-viewport-height);
+}
+
+html.is-mobile-shell body {
+    overscroll-behavior-y: contain;
+}
+
+html.is-app-fullscreen body {
+    min-height: 100dvh;
+}
+
+html.is-mobile-shell #app {
+    min-height: calc(var(--app-viewport-height) - var(--nav-height));
 }
 
 /* 衬线工具类 — 用于标题 / 高级感强调 */

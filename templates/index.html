@@ -3,13 +3,20 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content">
     <!-- PWA / Fullscreen Mobile Mode -->
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="manifest" href="/static/manifest.json?v=2">
+    <meta name="theme-color" content="#f2f2f7">
+    <meta name="application-name" content="实验助手">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="实验助手">
     <meta name="apple-touch-fullscreen" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="full-screen" content="yes">
+    <meta name="browsermode" content="application">
+    <meta name="x5-fullscreen" content="true">
+    <meta name="x5-page-mode" content="app">
     <title>实验流程管理平台</title>
     <meta name="description" content="实验全流程记录、样本流转与日程管理平台">
     <link rel="icon"
@@ -24,7 +31,7 @@
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- App Styles -->
-    <link rel="stylesheet" href="/static/css/style.css?v=47">
+    <link rel="stylesheet" href="/static/css/style.css?v=48">
 </head>
 
 <body class="auth-pending">
@@ -458,7 +465,7 @@
     </nav>
 
     <script src="/static/js/records.js?v=25"></script>
-    <script src="/static/js/app.js?v=48"></script>
+    <script src="/static/js/app.js?v=49"></script>
     <script src="/static/js/wb.js?v=21"></script>
     <script src="/static/js/pcr.js?v=46"></script>
     <script src="/static/js/journal.js?v=10"></script>

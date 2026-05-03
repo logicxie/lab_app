@@ -23,6 +23,134 @@ let STATE = {
 
 let AUTH_USER = null;
 
+const MOBILE_FULLSCREEN_MEDIA = '(max-width: 768px), (pointer: coarse)';
+let MOBILE_FULLSCREEN_INITIALIZED = false;
+let MOBILE_FULLSCREEN_LAST_ATTEMPT = 0;
+
+function isMobileShell() {
+    return !!(window.matchMedia && window.matchMedia(MOBILE_FULLSCREEN_MEDIA).matches);
+}
+
+function isStandaloneDisplayMode() {
+    return !!(
+        window.navigator.standalone === true ||
+        (window.matchMedia && (
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: standalone)').matches
+        ))
+    );
+}
+
+function getFullscreenElement() {
+    return document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement ||
+        null;
+}
+
+function updateMobileFullscreenClasses() {
+    document.documentElement.classList.toggle('is-mobile-shell', isMobileShell());
+    document.documentElement.classList.toggle('is-app-fullscreen', isStandaloneDisplayMode() || !!getFullscreenElement());
+}
+
+function updateMobileViewportHeight() {
+    if (!isMobileShell()) {
+        document.documentElement.style.removeProperty('--app-viewport-height');
+        updateMobileFullscreenClasses();
+        return;
+    }
+    let viewportHeight = window.visualViewport && window.visualViewport.height
+        ? window.visualViewport.height
+        : window.innerHeight;
+    if (viewportHeight > 0) {
+        document.documentElement.style.setProperty('--app-viewport-height', `${Math.round(viewportHeight)}px`);
+    }
+    updateMobileFullscreenClasses();
+}
+
+function requestMobileFullscreen() {
+    updateMobileViewportHeight();
+    if (!isMobileShell() || isStandaloneDisplayMode() || getFullscreenElement()) return Promise.resolve(false);
+
+    let root = document.documentElement;
+    let requestFullscreen = root.requestFullscreen ||
+        root.webkitRequestFullscreen ||
+        root.mozRequestFullScreen ||
+        root.msRequestFullscreen;
+    if (!requestFullscreen) return Promise.resolve(false);
+
+    let requestResult;
+    try {
+        requestResult = requestFullscreen.call(root, { navigationUI: 'hide' });
+    } catch (fullscreenError) {
+        try {
+            requestResult = requestFullscreen.call(root);
+        } catch (fallbackError) {
+            updateMobileFullscreenClasses();
+            return Promise.resolve(false);
+        }
+    }
+
+    return Promise.resolve(requestResult)
+        .then(() => {
+            updateMobileViewportHeight();
+            return true;
+        })
+        .catch(() => {
+            updateMobileFullscreenClasses();
+            return false;
+        });
+}
+
+function collapseMobileBrowserBar() {
+    if (!isMobileShell() || isStandaloneDisplayMode() || getFullscreenElement()) return;
+    window.setTimeout(() => {
+        let scrollingElement = document.scrollingElement || document.documentElement;
+        if (!scrollingElement || window.scrollY > 1) return;
+        if (scrollingElement.scrollHeight <= window.innerHeight + 2) return;
+        try {
+            window.scrollTo({ left: 0, top: 1, behavior: 'auto' });
+        } catch (scrollError) {
+            window.scrollTo(0, 1);
+        }
+    }, 250);
+}
+
+function handleMobileFullscreenGesture() {
+    if (!isMobileShell() || isStandaloneDisplayMode() || getFullscreenElement()) return;
+    let now = Date.now();
+    if (now - MOBILE_FULLSCREEN_LAST_ATTEMPT < 1200) return;
+    MOBILE_FULLSCREEN_LAST_ATTEMPT = now;
+    requestMobileFullscreen();
+}
+
+function initMobileFullscreenMode() {
+    if (MOBILE_FULLSCREEN_INITIALIZED) return;
+    MOBILE_FULLSCREEN_INITIALIZED = true;
+
+    updateMobileViewportHeight();
+    requestMobileFullscreen();
+    collapseMobileBrowserBar();
+
+    ['click', 'touchend', 'pointerup'].forEach(eventName => {
+        document.addEventListener(eventName, handleMobileFullscreenGesture, { capture: true, passive: true });
+    });
+    document.addEventListener('fullscreenchange', updateMobileViewportHeight);
+    document.addEventListener('webkitfullscreenchange', updateMobileViewportHeight);
+    window.addEventListener('resize', updateMobileViewportHeight, { passive: true });
+    window.addEventListener('orientationchange', () => {
+        window.setTimeout(() => {
+            updateMobileViewportHeight();
+            collapseMobileBrowserBar();
+        }, 250);
+    }, { passive: true });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateMobileViewportHeight, { passive: true });
+        window.visualViewport.addEventListener('scroll', updateMobileViewportHeight, { passive: true });
+    }
+}
+
 document.addEventListener('click', (event) => {
     let summary = event.target.closest('.workflow-steps-details > summary');
     if (!summary) return;
@@ -546,6 +674,7 @@ async function initAuthenticatedApp() {
 }
 
 async function initApp() {
+    initMobileFullscreenMode();
     let authenticated = await authCheckSession();
     if (!authenticated) return;
     await initAuthenticatedApp();
